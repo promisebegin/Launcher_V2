@@ -93,7 +93,6 @@ namespace KartRider
             else
             {
                 // 检查更新
-                await Update.UpdateDataAsync();
 
                 string TCGame = "HKEY_CURRENT_USER\\SOFTWARE\\TCGame\\kart";
                 string RootDirectory = (string)Registry.GetValue(TCGame, "gamepath", null);
