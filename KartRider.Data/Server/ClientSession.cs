@@ -1477,11 +1477,6 @@ namespace KartRider
                             }
                             this.Parent.Client.Send(outPacket);
                         }
-                        using (OutPacket outPacket = new OutPacket("PcSlaveNotice"))
-                        {
-                            outPacket.WriteString($"{Nickname} / {RandomTrack.GetTrackName(ProfileService.ProfileConfigs[Nickname].Rider.Track)} / {min}:{sec}:{mil}");
-                            this.Parent.Client.Send(outPacket);
-                        }
                         ProfileService.Save(Nickname);
                         return;
                     }
@@ -3757,4 +3752,5 @@ namespace KartRider
         }
     }
 }
+
 
