@@ -276,11 +276,10 @@ namespace KartRider
                         ProfileService.ProfileConfigs[Nickname].RiderItem.Set_Unknown5 = iPacket.ReadShort();
                         ProfileService.Save(Nickname);
                         int roomId = RoomManager.TryGetRoomId(Nickname);
-                        if (roomId == -1)
+                        if (roomId != -1)
                         {
-                            return;
+                            MultyPlayer.GrSlotDataPacket(roomId);
                         }
-                        MultyPlayer.GrSlotDataPacket(RoomId);
                         return;
                     }
                     else if (hash == Adler32Helper.GenerateAdler32_ASCII("PqGetRiderInfo", 0))
