@@ -294,6 +294,7 @@ public static class MultyPlayer
             outPacket.WriteLong(room.EndTicks + 5000);
             BroadCast(roomId, outPacket);
         }
+        room.StartTicks = 0;
         Console.WriteLine("EndTicks = {0}", room.EndTicks + 5000);
     }
 
@@ -396,9 +397,9 @@ public static class MultyPlayer
             }
             var state = iPacket.ReadByte();
             //start
-            room.StartTicks = ConvertTick() + 7000;
-            if (state == 0)
+            if (state == 0 && room.StartTicks == 0)
             {
+                room.StartTicks = ConvertTick() + 7000;
                 using (OutPacket oPacket = new OutPacket("GameAiMasterSlotNoticePacket"))
                 {
                     oPacket.WriteInt();
