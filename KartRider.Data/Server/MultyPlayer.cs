@@ -1249,7 +1249,7 @@ public static class MultyPlayer
                 {
                     outPacket.WriteByte(0);
                 }
-                outPacket.WriteEncInt(p.ID);
+                outPacket.WriteInt(p.ID);
 
                 outPacket.WriteBytes(new byte[30]);
 
