@@ -595,23 +595,20 @@ public static class MultyPlayer
         else if (hash == Adler32Helper.GenerateAdler32_ASCII("PqChannelSwitch", 0))
         {
             Nickname = nickname;
-
-            IPEndPoint serverEndPoint = Parent.Client.Socket.LocalEndPoint as IPEndPoint;
-            if (serverEndPoint == null) return;
-
             int length = iPacket.ReadInt();
             iPacket.ReadBytes(length);
             byte channel = (byte)(iPacket.ReadByte() - 1);
             var channelData = GameSupport.Channels.ContainsKey(channel) ? GameSupport.Channels[channel] : null;
             StartTimeAttack[nickname] = channelData.CreateSpeed;
             Console.WriteLine("Channel Switch, channel = {0}", channelData.Name);
-
+            IPEndPoint serverEndPoint = Parent.Client.Socket.LocalEndPoint as IPEndPoint;
+            if (serverEndPoint == null) return;
             using (OutPacket oPacket = new OutPacket("PrChannelSwitch"))
             {
                 oPacket.WriteInt(0);
                 oPacket.WriteShort(channel);
                 oPacket.WriteShort(iPacket.ReadShort());
-                oPacket.WriteEndPoint(serverEndPoint);
+                oPacket.WriteEndPoint(IPAddress.Parse(ProfileService.SettingConfig.ServerIP == "127.0.0.1" ? serverEndPoint.Address.ToString() : ProfileService.SettingConfig.ServerIP), ProfileService.SettingConfig.ServerPort);
                 Parent.Client.Send(oPacket);
             }
             return;
@@ -631,8 +628,8 @@ public static class MultyPlayer
             using (OutPacket oPacket = new OutPacket("PrChannelMoveIn"))
             {
                 oPacket.WriteByte(1);
-                oPacket.WriteEndPoint(serverEndPoint.Address, ProfileService.SettingConfig.ServerPort);
-                oPacket.WriteEndPoint(serverEndPoint.Address, (ushort)(ProfileService.SettingConfig.ServerPort + 1));
+                oPacket.WriteEndPoint(IPAddress.Parse(ProfileService.SettingConfig.ServerIP == "127.0.0.1" ? serverEndPoint.Address.ToString() : ProfileService.SettingConfig.ServerIP), ProfileService.SettingConfig.ServerPort);
+                oPacket.WriteEndPoint(IPAddress.Parse(ProfileService.SettingConfig.ServerIP == "127.0.0.1" ? serverEndPoint.Address.ToString() : ProfileService.SettingConfig.ServerIP), (ushort)(ProfileService.SettingConfig.ServerPort + 1));
                 Parent.Client.Send(oPacket);
             }
             return;
@@ -1302,16 +1299,16 @@ public static class MultyPlayer
                     outPacket.WriteInt(p.PlayerType); // Player Type, 2 = RoomMaster, 3 = AutoReady, 4 = Observer, 5 = Preparing, 7 = AI
                 }
                 outPacket.WriteUInt(ClientManager.GetUserNO(p.Nickname));
-                if (ClientManager.ClientUdpAddrs.TryGetValue(p.Nickname, out IPEndPoint endPoint))
+                if (ClientManager.ClientP2pAddrs.TryGetValue(p.Nickname, out IPEndPoint endPoint))
                 {
                     outPacket.WriteEndPoint(endPoint);
+                    Console.WriteLine($"[P2P] {p.Nickname} {endPoint.Address} {endPoint.Port}");
                 }
                 else
                 {
                     outPacket.WriteEndPoint(new IPEndPoint(IPAddress.Any, 0));
                 }
-                outPacket.WriteInt(0);
-                outPacket.WriteShort(0);
+                outPacket.WriteEndPoint(new IPEndPoint(IPAddress.Any, 0));
                 outPacket.WriteString(p.Nickname);
                 outPacket.WriteShort(ProfileService.ProfileConfigs[p.Nickname].Rider.Emblem1);
                 outPacket.WriteShort(ProfileService.ProfileConfigs[p.Nickname].Rider.Emblem2);

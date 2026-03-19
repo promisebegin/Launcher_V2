@@ -45,9 +45,23 @@ namespace KartRider
             {
                 IPEndPoint clientEndPoint = Parent.Client.Socket.RemoteEndPoint as IPEndPoint;
                 if (clientEndPoint == null) return;
+                IPEndPoint serverEndPoint = Parent.Client.Socket.LocalEndPoint as IPEndPoint;
+                if (serverEndPoint == null) return;
                 string clientId = ClientManager.GetClientId(clientEndPoint);
+                Console.WriteLine($"client: {clientId}");
+                Console.WriteLine($"server: {serverEndPoint.Address}:{serverEndPoint.Port}");
                 var ClientGroup = ClientManager.ClientGroups[clientId];
                 string Nickname = ClientGroup.Nickname;
+
+                if (!ClientManager.ClientUdpAddrs.ContainsKey(Nickname))
+                {
+                    ClientManager.ClientUdpAddrs[Nickname] = clientEndPoint;
+                }
+                else if (!ClientManager.ClientP2pAddrs.ContainsKey(Nickname))
+                {
+                    ClientManager.ClientP2pAddrs[Nickname] = clientEndPoint;
+                }
+
                 iPacket.Position = 0;
                 uint hash = iPacket.ReadUInt();
                 string currentTime = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
@@ -2700,10 +2714,6 @@ namespace KartRider
                         using (OutPacket outPacket = new OutPacket("SpRpTimeShopPacket"))
                         {
                             outPacket.WriteHexString("00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 FF FF FF FF FF FF FF FF FF FF FF FF FF 47 00 00 00 00 00 47 00 00 00 00 00 00 00 02 00 00 00");
-                            // outPacket.WriteHexString("0F 00 00 00 00 00 00 00 01 B3 77 00 00 00 00 00 00 01 00 00 00 01 18 66 00 00 00 00 00 00 02 00 00 00 02 8E 6B 00 00 00 00 00 00 03 00 00 00 02 77 6A 00 00 00 00 00 00 04 00 00 00 02 8F 61 00 00 00 00 00 00 05 00 00 00 03 50 71 00 00 00 00 00 00 06 00 00 00 03 85 6A 00 00 00 00 00 00 07 00 00 00 03 8A 6E 00 00 00 00 00 00 08 00 00 00 03 BB 77 00 00 00 00 00 00 09 00 00 00 03 26 75 00 00 00 00 00 00 0A 00 00 00 04 00 00 00 00 EE 86 01 00 0B 00 00 00 04 00 00 00 00 D5 86 01 00 0C 00 00 00 04 00 00 00 00 CC 86 01 00 0D 00 00 00 04 00 00 00 00 BB 86 01 00 0E 00 00 00 04 00 00 00 00 E1 86 01 00");
-                            // outPacket.WriteUShort((ushort)RouterListener.DataTime()[0]);
-                            // outPacket.WriteUShort((ushort)RouterListener.DataTime()[1]);
-                            // outPacket.WriteHexString("00 00 00 00 03 00 00 00 17 00 48 00 0F 00 17 00 51 00 0F 00 03 00 17 00 48 00 05 00 17 00 51 00 05 00 04 00 17 00 48 00 03 00 17 00 51 00 03 00 05 00 FF FF FF FF FF FF FF FF FF FF FF FF FF 50 00 00 00 00 00 50 00 00 00 00 00 00 00 00 00 00 00 00 00");
                             this.Parent.Client.Send(outPacket);
                         }
                         return;
@@ -2809,9 +2819,6 @@ namespace KartRider
                     {
                         GameDataReset.DataReset(Nickname);
 
-                        IPEndPoint serverEndPoint = Parent.Client.Socket.LocalEndPoint as IPEndPoint;
-                        if (serverEndPoint == null) return;
-
                         bool PcMsgPassport = false;
 
                         using (OutPacket outPacket = new OutPacket("PrLogin"))
@@ -2832,8 +2839,8 @@ namespace KartRider
                                 outPacket.WriteInt(0);
                             }
                             outPacket.WriteByte(0);
-                            outPacket.WriteEndPoint(serverEndPoint.Address, ProfileService.SettingConfig.ServerPort);
-                            outPacket.WriteEndPoint(serverEndPoint.Address, (ushort)(ProfileService.SettingConfig.ServerPort + 1));
+                            outPacket.WriteEndPoint(IPAddress.Parse(ProfileService.SettingConfig.ServerIP == "127.0.0.1" ? clientEndPoint.Address.ToString() : ProfileService.SettingConfig.ServerIP), ProfileService.SettingConfig.ServerPort);
+                            outPacket.WriteEndPoint(IPAddress.Parse(ProfileService.SettingConfig.ServerIP == "127.0.0.1" ? clientEndPoint.Address.ToString() : ProfileService.SettingConfig.ServerIP), (ushort)(ProfileService.SettingConfig.ServerPort + 1));
                             outPacket.WriteByte(0);
                             outPacket.WriteByte(0);
                             outPacket.WriteByte((byte)(PcMsgPassport ? 1 : 0));
@@ -3708,14 +3715,14 @@ namespace KartRider
                     {
                         var ClientP2pAddr = iPacket.ReadEndPoint();
                         Console.WriteLine($"{ClientP2pAddr.Address}:{ClientP2pAddr.Port}");
-                        ClientManager.ClientP2pAddrs[Nickname] = ClientP2pAddr;
+                        ClientManager.ClientP2pAddrs[Nickname] = new IPEndPoint(ClientManager.ClientP2pAddrs[Nickname].Address, ClientP2pAddr.Port);
                         return;
                     }
                     else if (hash == Adler32Helper.GenerateAdler32_ASCII("ChClientUdpAddrPacket", 0))
                     {
                         var ClientUdpAddr = iPacket.ReadEndPoint();
                         Console.WriteLine($"{ClientUdpAddr.Address}:{ClientUdpAddr.Port}");
-                        ClientManager.ClientUdpAddrs[Nickname] = ClientUdpAddr;
+                        ClientManager.ClientUdpAddrs[Nickname] = new IPEndPoint(ClientManager.ClientUdpAddrs[Nickname].Address, ClientUdpAddr.Port);
                         return;
                     }
                     else if (hash == Adler32Helper.GenerateAdler32_ASCII("PqStartTrainingCenter", 0))
