@@ -696,7 +696,7 @@ namespace KartRider
                             outPacket.WriteShort(0);
                             outPacket.WriteInt(0);
                             outPacket.WriteShort(0);
-                            outPacket.WriteUShort(ProfileService.ProfileConfigs[Nickname].RiderItem.Set_Kart);
+                            outPacket.WriteUShort(Kart);
                             outPacket.WriteShort(1);
                             outPacket.WriteShort(0);
                             outPacket.WriteByte(1);//Grade
@@ -709,7 +709,7 @@ namespace KartRider
                             outPacket.WriteBytes(new byte[20]);
                             this.Parent.Client.Send(outPacket);
                         }
-                        NewRider.AddNewKart(this.Parent, Nickname);
+                        NewRider.AddNewKart(this.Parent, Nickname, Kart);
                         return;
                     }
                     else if (hash == Adler32Helper.GenerateAdler32_ASCII("PqKartLevelUpProbText", 0))
@@ -3706,7 +3706,16 @@ namespace KartRider
                                 outPacket.WriteUInt(User.Key);
                                 outPacket.WriteString(User.Value);
                                 outPacket.WriteUInt(ProfileService.ProfileConfigs[User.Value].Rider.RP);
-                                outPacket.WriteHexString("00 00 00 00 00 00 01 00 00 00 00 00");
+                                outPacket.WriteHexString("00 00 00 00 00 00");
+                                if (ClientManager.ClientGroups.Any(cg => cg.Value.Nickname == User.Value))
+                                {
+                                    outPacket.WriteByte(1);
+                                }
+                                else
+                                {
+                                    outPacket.WriteByte(0);
+                                }
+                                outPacket.WriteHexString("00 00 00 00 00");
                             }
                             outPacket.WriteInt(0);
                             outPacket.WriteByte(1);
@@ -3725,7 +3734,16 @@ namespace KartRider
                                 outPacket.WriteUInt(User.Key);
                                 outPacket.WriteString(User.Value);
                                 outPacket.WriteUInt(ProfileService.ProfileConfigs[User.Value].Rider.RP);
-                                outPacket.WriteHexString("00 00 00 00 00 00 01 00 00 00 00 00");
+                                outPacket.WriteHexString("00 00 00 00 00 00");
+                                if (ClientManager.ClientGroups.Any(cg => cg.Value.Nickname == User.Value))
+                                {
+                                    outPacket.WriteByte(1);
+                                }
+                                else
+                                {
+                                    outPacket.WriteByte(0);
+                                }
+                                outPacket.WriteHexString("00 00 00 00 00");
                             }
                             outPacket.WriteByte(1);
                             outPacket.WriteBytes(new byte[8]);
