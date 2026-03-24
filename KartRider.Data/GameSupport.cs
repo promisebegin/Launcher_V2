@@ -217,7 +217,7 @@ namespace KartRider
                 }
                 else
                 {
-                    outPacket.WriteEndPoint(new IPEndPoint(IPAddress.Any, (ushort)(ProfileService.SettingConfig.ServerPort + 1)));
+                    outPacket.WriteEndPoint(new IPEndPoint(0, 0));
                 }
                 Parent.Client.Send(outPacket);
             }
