@@ -43,24 +43,17 @@ namespace KartRider
             int ALLnum;
             lock (this.Parent.m_lock)
             {
-                IPEndPoint clientEndPoint = Parent.Client.Socket.RemoteEndPoint as IPEndPoint;
-                if (clientEndPoint == null) return;
-                IPEndPoint serverEndPoint = Parent.Client.Socket.LocalEndPoint as IPEndPoint;
-                if (serverEndPoint == null) return;
-                string clientId = ClientManager.GetClientId(clientEndPoint);
-                var ClientGroup = ClientManager.ClientGroups[clientId];
-                string Nickname = ClientGroup.Nickname;
-
                 iPacket.Position = 0;
                 uint hash = iPacket.ReadUInt();
                 string currentTime = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
-                Console.WriteLine($"[{currentTime}][{Nickname}] " + (PacketName)hash + ": " + BitConverter.ToString(iPacket.ToArray()).Replace("-", " "));
+                Console.WriteLine($"[{currentTime}][{this.Parent.Nickname}] " + (PacketName)hash + ": " + BitConverter.ToString(iPacket.ToArray()).Replace("-", " "));
                 if (hash == Adler32Helper.GenerateAdler32_ASCII("PqCnAuthenLogin", 0))
                 {
                     iPacket.ReadInt();
                     iPacket.ReadInt();
                     string dataPacket = Base64Helper.Decode(iPacket.ReadString(true));
-                    DataPacket packet = JsonHelper.Deserialize<DataPacket>(dataPacket) ?? new DataPacket();
+                    DataPacket packet = JsonHelper.Deserialize<DataPacket>(dataPacket);
+                    if (packet == null) return;
                     if (ClientManager.HasClientWithNickname(packet.Nickname))
                     {
                         using (OutPacket outPacket = new OutPacket("PrCnAuthenLogin"))
@@ -74,9 +67,6 @@ namespace KartRider
                     }
                     else
                     {
-                        Nickname = packet.Nickname;
-                        ClientGroup.Nickname = packet.Nickname;
-                        FileName.Load(packet.Nickname);
                         using (OutPacket outPacket = new OutPacket("PrCnAuthenLogin"))
                         {
                             outPacket.WriteInt(1);
@@ -85,7 +75,16 @@ namespace KartRider
                             outPacket.WriteString("https://www.tiancity.com/agreement");
                             this.Parent.Client.Send(outPacket);
                         }
+                        IPEndPoint clientEndPoint = Parent.Client.Socket.RemoteEndPoint as IPEndPoint;
+                        if (clientEndPoint == null) return;
+                        string clientId = ClientManager.GetClientId(clientEndPoint);
+                        var ClientGroup = ClientManager.ClientGroups[clientId];
+                        this.Parent.Nickname = packet.Nickname;
+                        ClientGroup.Nickname = packet.Nickname;
+                        FileName.Load(packet.Nickname);
                         uint UserNO = ClientManager.GetUserNO(packet.Nickname);
+                        ProfileService.ProfileConfigs[packet.Nickname].Rider.ClientId = clientId;
+                        ProfileService.Save(packet.Nickname);
                     }
                     return;
                 }
@@ -105,7 +104,7 @@ namespace KartRider
                         using (OutPacket outPacket = new OutPacket("LoRpAddRacingTimePacket"))
                         {
                             //outPacket.WriteHexString("FF FF FF FF 00 00 00 00 00 00 00 00 00 00");
-                            outPacket.WriteUInt(Time[Nickname]);
+                            outPacket.WriteUInt(Time[this.Parent.Nickname]);
                             outPacket.WriteInt(0);
                             outPacket.WriteShort(0);
                             outPacket.WriteInt(0);
@@ -113,15 +112,15 @@ namespace KartRider
                         }
                         var manager = new CompetitiveDataManager();
                         CompleteTrackScoreCalculator calculator = new CompleteTrackScoreCalculator();
-                        var scores = calculator.CalculateTrackScoreDetails(Track, Time[Nickname], Booster, Crash, TimeAttack.TrackDictionary);
+                        var scores = calculator.CalculateTrackScoreDetails(Track, Time[this.Parent.Nickname], Booster, Crash, TimeAttack.TrackDictionary);
                         if (scores != null)
                         {
-                            var data = new CompetitiveData { Track = Track, Kart = Kart, Time = Time[Nickname], Booster = Booster, BoosterPoint = scores.BoostScore, Crash = Crash, CrashPoint = scores.CrashScore, Point = scores.TotalScore };
-                            manager.SaveData(Nickname, data);
+                            var data = new CompetitiveData { Track = Track, Kart = Kart, Time = Time[this.Parent.Nickname], Booster = Booster, BoosterPoint = scores.BoostScore, Crash = Crash, CrashPoint = scores.CrashScore, Point = scores.TotalScore };
+                            manager.SaveData(this.Parent.Nickname, data);
                         }
                         using (OutPacket outPacket = new OutPacket("PrGetCompetitiveSlotInfo"))
                         {
-                            var competitiveData = manager.LoadAllData(Nickname);
+                            var competitiveData = manager.LoadAllData(this.Parent.Nickname);
                             outPacket.WriteInt(competitiveData.Count);
                             foreach (var competitive in competitiveData)
                             {
@@ -189,11 +188,11 @@ namespace KartRider
                     {
                         var nickname = iPacket.ReadString(false);
 
-                        if (!FileName.FileNames.ContainsKey(Nickname))
+                        if (!FileName.FileNames.ContainsKey(this.Parent.Nickname))
                         {
-                            FileName.Load(Nickname);
+                            FileName.Load(this.Parent.Nickname);
                         }
-                        var filename = FileName.FileNames[Nickname];
+                        var filename = FileName.FileNames[this.Parent.Nickname];
 
                         if (Directory.Exists(filename.NicknameDir))
                         {
@@ -213,22 +212,23 @@ namespace KartRider
                                     this.Parent.Client.Send(outPacket);
                                 }
                                 Directory.Move(filename.NicknameDir, Path.GetFullPath(Path.Combine(FileName.ProfileDir, nickname)));
-                                if (ProfileService.SettingConfig.Name == Nickname)
+                                if (ProfileService.SettingConfig.Name == this.Parent.Nickname)
                                 {
                                     ProfileService.SettingConfig.Name = nickname;
                                     ProfileService.SaveSettings();
                                 }
-                                Nickname = nickname;
-                                ClientGroup.Nickname = nickname;
+                                ClientGroup play = ClientManager.ClientGroups[ProfileService.ProfileConfigs[this.Parent.Nickname].Rider.ClientId];
+                                play.Nickname = nickname;
                                 FileName.Load(nickname);
-                                FileName.FileNames.Remove(Nickname);
+                                FileName.FileNames.Remove(this.Parent.Nickname);
+                                this.Parent.Nickname = nickname;
                             }
                         }
                         return;
                     }
                     else if (hash == Adler32Helper.GenerateAdler32_ASCII("PqGetRider", 0))
                     {
-                        NewRider.LoadItemData(this.Parent, Nickname);
+                        NewRider.LoadItemData(this.Parent, this.Parent.Nickname);
                         return;
                     }
                     else if (hash == Adler32Helper.GenerateAdler32_ASCII("LoRqGetRiderItemPacket", 0))
@@ -238,46 +238,46 @@ namespace KartRider
                     }
                     else if (hash == Adler32Helper.GenerateAdler32_ASCII("LoRqSetRiderItemOnPacket", 0))
                     {
-                        ProfileService.ProfileConfigs[Nickname].RiderItem.Set_Character = iPacket.ReadUShort();
-                        ProfileService.ProfileConfigs[Nickname].RiderItem.Set_Paint = iPacket.ReadUShort();
-                        ProfileService.ProfileConfigs[Nickname].RiderItem.Set_Kart = iPacket.ReadUShort();
-                        ProfileService.ProfileConfigs[Nickname].RiderItem.Set_Plate = iPacket.ReadUShort();
-                        ProfileService.ProfileConfigs[Nickname].RiderItem.Set_Goggle = iPacket.ReadUShort();
-                        ProfileService.ProfileConfigs[Nickname].RiderItem.Set_Balloon = iPacket.ReadUShort();
-                        ProfileService.ProfileConfigs[Nickname].RiderItem.Set_Unknown1 = iPacket.ReadUShort();
-                        ProfileService.ProfileConfigs[Nickname].RiderItem.Set_HeadBand = iPacket.ReadUShort();
-                        ProfileService.ProfileConfigs[Nickname].RiderItem.Set_HeadPhone = iPacket.ReadUShort();
-                        ProfileService.ProfileConfigs[Nickname].RiderItem.Set_HandGearL = iPacket.ReadUShort();
-                        ProfileService.ProfileConfigs[Nickname].RiderItem.Set_Unknown2 = iPacket.ReadUShort();
-                        ProfileService.ProfileConfigs[Nickname].RiderItem.Set_Uniform = iPacket.ReadUShort();
-                        ProfileService.ProfileConfigs[Nickname].RiderItem.Set_Decal = iPacket.ReadUShort();
-                        ProfileService.ProfileConfigs[Nickname].RiderItem.Set_Pet = iPacket.ReadUShort();
-                        ProfileService.ProfileConfigs[Nickname].RiderItem.Set_FlyingPet = iPacket.ReadUShort();
-                        ProfileService.ProfileConfigs[Nickname].RiderItem.Set_Aura = iPacket.ReadUShort();
-                        ProfileService.ProfileConfigs[Nickname].RiderItem.Set_SkidMark = iPacket.ReadUShort();
-                        ProfileService.ProfileConfigs[Nickname].RiderItem.Set_SpecialKit = iPacket.ReadUShort();
-                        ProfileService.ProfileConfigs[Nickname].RiderItem.Set_RidColor = iPacket.ReadUShort();
-                        ProfileService.ProfileConfigs[Nickname].RiderItem.Set_BonusCard = iPacket.ReadUShort();
-                        ProfileService.ProfileConfigs[Nickname].RiderItem.Set_BossModeCard = iPacket.ReadUShort();
-                        ProfileService.ProfileConfigs[Nickname].RiderItem.Set_KartPlant1 = iPacket.ReadUShort();
-                        ProfileService.ProfileConfigs[Nickname].RiderItem.Set_KartPlant2 = iPacket.ReadUShort();
-                        ProfileService.ProfileConfigs[Nickname].RiderItem.Set_KartPlant3 = iPacket.ReadUShort();
-                        ProfileService.ProfileConfigs[Nickname].RiderItem.Set_KartPlant4 = iPacket.ReadUShort();
-                        ProfileService.ProfileConfigs[Nickname].RiderItem.Set_Unknown3 = iPacket.ReadUShort();
-                        ProfileService.ProfileConfigs[Nickname].RiderItem.Set_FishingPole = iPacket.ReadUShort();
-                        ProfileService.ProfileConfigs[Nickname].RiderItem.Set_Tachometer = iPacket.ReadUShort();
-                        ProfileService.ProfileConfigs[Nickname].RiderItem.Set_Dye = iPacket.ReadUShort();
-                        ProfileService.ProfileConfigs[Nickname].RiderItem.Set_KartSN = iPacket.ReadUShort();
-                        ProfileService.ProfileConfigs[Nickname].RiderItem.Set_Unknown4 = iPacket.ReadByte();
-                        ProfileService.ProfileConfigs[Nickname].RiderItem.Set_KartCoating = iPacket.ReadUShort();
-                        ProfileService.ProfileConfigs[Nickname].RiderItem.Set_KartTailLamp = iPacket.ReadUShort();
-                        ProfileService.ProfileConfigs[Nickname].RiderItem.Set_slotBg = iPacket.ReadUShort();
-                        ProfileService.ProfileConfigs[Nickname].RiderItem.Set_KartCoating12 = iPacket.ReadUShort();
-                        ProfileService.ProfileConfigs[Nickname].RiderItem.Set_KartTailLamp12 = iPacket.ReadUShort();
-                        ProfileService.ProfileConfigs[Nickname].RiderItem.Set_KartBoosterEffect12 = iPacket.ReadUShort();
-                        ProfileService.ProfileConfigs[Nickname].RiderItem.Set_Unknown5 = iPacket.ReadUShort();
-                        ProfileService.Save(Nickname);
-                        int roomId = RoomManager.TryGetRoomId(Nickname);
+                        ProfileService.ProfileConfigs[this.Parent.Nickname].RiderItem.Set_Character = iPacket.ReadUShort();
+                        ProfileService.ProfileConfigs[this.Parent.Nickname].RiderItem.Set_Paint = iPacket.ReadUShort();
+                        ProfileService.ProfileConfigs[this.Parent.Nickname].RiderItem.Set_Kart = iPacket.ReadUShort();
+                        ProfileService.ProfileConfigs[this.Parent.Nickname].RiderItem.Set_Plate = iPacket.ReadUShort();
+                        ProfileService.ProfileConfigs[this.Parent.Nickname].RiderItem.Set_Goggle = iPacket.ReadUShort();
+                        ProfileService.ProfileConfigs[this.Parent.Nickname].RiderItem.Set_Balloon = iPacket.ReadUShort();
+                        ProfileService.ProfileConfigs[this.Parent.Nickname].RiderItem.Set_Unknown1 = iPacket.ReadUShort();
+                        ProfileService.ProfileConfigs[this.Parent.Nickname].RiderItem.Set_HeadBand = iPacket.ReadUShort();
+                        ProfileService.ProfileConfigs[this.Parent.Nickname].RiderItem.Set_HeadPhone = iPacket.ReadUShort();
+                        ProfileService.ProfileConfigs[this.Parent.Nickname].RiderItem.Set_HandGearL = iPacket.ReadUShort();
+                        ProfileService.ProfileConfigs[this.Parent.Nickname].RiderItem.Set_Unknown2 = iPacket.ReadUShort();
+                        ProfileService.ProfileConfigs[this.Parent.Nickname].RiderItem.Set_Uniform = iPacket.ReadUShort();
+                        ProfileService.ProfileConfigs[this.Parent.Nickname].RiderItem.Set_Decal = iPacket.ReadUShort();
+                        ProfileService.ProfileConfigs[this.Parent.Nickname].RiderItem.Set_Pet = iPacket.ReadUShort();
+                        ProfileService.ProfileConfigs[this.Parent.Nickname].RiderItem.Set_FlyingPet = iPacket.ReadUShort();
+                        ProfileService.ProfileConfigs[this.Parent.Nickname].RiderItem.Set_Aura = iPacket.ReadUShort();
+                        ProfileService.ProfileConfigs[this.Parent.Nickname].RiderItem.Set_SkidMark = iPacket.ReadUShort();
+                        ProfileService.ProfileConfigs[this.Parent.Nickname].RiderItem.Set_SpecialKit = iPacket.ReadUShort();
+                        ProfileService.ProfileConfigs[this.Parent.Nickname].RiderItem.Set_RidColor = iPacket.ReadUShort();
+                        ProfileService.ProfileConfigs[this.Parent.Nickname].RiderItem.Set_BonusCard = iPacket.ReadUShort();
+                        ProfileService.ProfileConfigs[this.Parent.Nickname].RiderItem.Set_BossModeCard = iPacket.ReadUShort();
+                        ProfileService.ProfileConfigs[this.Parent.Nickname].RiderItem.Set_KartPlant1 = iPacket.ReadUShort();
+                        ProfileService.ProfileConfigs[this.Parent.Nickname].RiderItem.Set_KartPlant2 = iPacket.ReadUShort();
+                        ProfileService.ProfileConfigs[this.Parent.Nickname].RiderItem.Set_KartPlant3 = iPacket.ReadUShort();
+                        ProfileService.ProfileConfigs[this.Parent.Nickname].RiderItem.Set_KartPlant4 = iPacket.ReadUShort();
+                        ProfileService.ProfileConfigs[this.Parent.Nickname].RiderItem.Set_Unknown3 = iPacket.ReadUShort();
+                        ProfileService.ProfileConfigs[this.Parent.Nickname].RiderItem.Set_FishingPole = iPacket.ReadUShort();
+                        ProfileService.ProfileConfigs[this.Parent.Nickname].RiderItem.Set_Tachometer = iPacket.ReadUShort();
+                        ProfileService.ProfileConfigs[this.Parent.Nickname].RiderItem.Set_Dye = iPacket.ReadUShort();
+                        ProfileService.ProfileConfigs[this.Parent.Nickname].RiderItem.Set_KartSN = iPacket.ReadUShort();
+                        ProfileService.ProfileConfigs[this.Parent.Nickname].RiderItem.Set_Unknown4 = iPacket.ReadByte();
+                        ProfileService.ProfileConfigs[this.Parent.Nickname].RiderItem.Set_KartCoating = iPacket.ReadUShort();
+                        ProfileService.ProfileConfigs[this.Parent.Nickname].RiderItem.Set_KartTailLamp = iPacket.ReadUShort();
+                        ProfileService.ProfileConfigs[this.Parent.Nickname].RiderItem.Set_slotBg = iPacket.ReadUShort();
+                        ProfileService.ProfileConfigs[this.Parent.Nickname].RiderItem.Set_KartCoating12 = iPacket.ReadUShort();
+                        ProfileService.ProfileConfigs[this.Parent.Nickname].RiderItem.Set_KartTailLamp12 = iPacket.ReadUShort();
+                        ProfileService.ProfileConfigs[this.Parent.Nickname].RiderItem.Set_KartBoosterEffect12 = iPacket.ReadUShort();
+                        ProfileService.ProfileConfigs[this.Parent.Nickname].RiderItem.Set_Unknown5 = iPacket.ReadUShort();
+                        ProfileService.Save(this.Parent.Nickname);
+                        int roomId = RoomManager.TryGetRoomId(this.Parent.Nickname);
                         if (roomId != -1)
                         {
                             MultyPlayer.GrSlotDataPacket(roomId);
@@ -289,7 +289,7 @@ namespace KartRider
                         iPacket.ReadInt();
                         iPacket.ReadInt();
                         string nickname = iPacket.ReadString(false);
-                        if (nickname == Nickname)
+                        if (nickname == this.Parent.Nickname)
                         {
                             GameSupport.PrGetRiderInfo(nickname, this.Parent);
                         }
@@ -312,8 +312,8 @@ namespace KartRider
                     }
                     else if (hash == Adler32Helper.GenerateAdler32_ASCII("PqUpdateRiderIntro", 0))
                     {
-                        ProfileService.ProfileConfigs[Nickname].Rider.RiderIntro = iPacket.ReadString(false);
-                        ProfileService.Save(Nickname);
+                        ProfileService.ProfileConfigs[this.Parent.Nickname].Rider.RiderIntro = iPacket.ReadString(false);
+                        ProfileService.Save(this.Parent.Nickname);
                         return;
                     }
                     else if (hash == Adler32Helper.GenerateAdler32_ASCII("PqUpdateRiderSchoolLevelPacket", 0))
@@ -338,41 +338,41 @@ namespace KartRider
                     }
                     else if (hash == Adler32Helper.GenerateAdler32_ASCII("PqUpdateGameOption", 0))
                     {
-                        ProfileService.ProfileConfigs[Nickname].GameOption.Set_BGM = iPacket.ReadFloat();
-                        ProfileService.ProfileConfigs[Nickname].GameOption.Set_Sound = iPacket.ReadFloat();
-                        ProfileService.ProfileConfigs[Nickname].GameOption.Main_BGM = iPacket.ReadByte();
-                        ProfileService.ProfileConfigs[Nickname].GameOption.Sound_effect = iPacket.ReadByte();
-                        ProfileService.ProfileConfigs[Nickname].GameOption.Full_screen = iPacket.ReadByte();
-                        ProfileService.ProfileConfigs[Nickname].GameOption.ShowMirror = iPacket.ReadByte();
-                        ProfileService.ProfileConfigs[Nickname].GameOption.ShowOtherPlayerNames = iPacket.ReadByte();
-                        ProfileService.ProfileConfigs[Nickname].GameOption.ShowOutlines = iPacket.ReadByte();
-                        ProfileService.ProfileConfigs[Nickname].GameOption.ShowShadows = iPacket.ReadByte();
-                        ProfileService.ProfileConfigs[Nickname].GameOption.HighLevelEffect = iPacket.ReadByte();
-                        ProfileService.ProfileConfigs[Nickname].GameOption.MotionBlurEffect = iPacket.ReadByte();
-                        ProfileService.ProfileConfigs[Nickname].GameOption.MotionDistortionEffect = iPacket.ReadByte();
-                        ProfileService.ProfileConfigs[Nickname].GameOption.HighEndOptimization = iPacket.ReadByte();//오토 레디
-                        ProfileService.ProfileConfigs[Nickname].GameOption.AutoReady = iPacket.ReadByte();//아이템 설명
-                        ProfileService.ProfileConfigs[Nickname].GameOption.PropDescription = iPacket.ReadByte();//녹화 품질
-                        ProfileService.ProfileConfigs[Nickname].GameOption.VideoQuality = iPacket.ReadByte();
-                        ProfileService.ProfileConfigs[Nickname].GameOption.BGM_Check = iPacket.ReadByte();//배경음
-                        ProfileService.ProfileConfigs[Nickname].GameOption.Sound_Check = iPacket.ReadByte();//효과음
-                        ProfileService.ProfileConfigs[Nickname].GameOption.ShowHitInfo = iPacket.ReadByte();
-                        ProfileService.ProfileConfigs[Nickname].GameOption.AutoBoost = iPacket.ReadByte();
-                        ProfileService.ProfileConfigs[Nickname].GameOption.GameType = iPacket.ReadByte();//팀전 개인전 여부
-                        ProfileService.ProfileConfigs[Nickname].GameOption.SetGhost = iPacket.ReadByte();//고스트 사용여부
-                        ProfileService.ProfileConfigs[Nickname].GameOption.SpeedType = iPacket.ReadByte();//채널 속도
-                        ProfileService.ProfileConfigs[Nickname].GameOption.RoomChat = iPacket.ReadByte();
-                        ProfileService.ProfileConfigs[Nickname].GameOption.DrivingChat = iPacket.ReadByte();
-                        ProfileService.ProfileConfigs[Nickname].GameOption.ShowAllPlayerHitInfo = iPacket.ReadByte();
-                        ProfileService.ProfileConfigs[Nickname].GameOption.ShowTeamColor = iPacket.ReadByte();
-                        ProfileService.ProfileConfigs[Nickname].GameOption.Set_screen = iPacket.ReadByte();
-                        ProfileService.ProfileConfigs[Nickname].GameOption.HideCompetitiveRank = iPacket.ReadByte();
-                        ProfileService.Save(Nickname);
+                        ProfileService.ProfileConfigs[this.Parent.Nickname].GameOption.Set_BGM = iPacket.ReadFloat();
+                        ProfileService.ProfileConfigs[this.Parent.Nickname].GameOption.Set_Sound = iPacket.ReadFloat();
+                        ProfileService.ProfileConfigs[this.Parent.Nickname].GameOption.Main_BGM = iPacket.ReadByte();
+                        ProfileService.ProfileConfigs[this.Parent.Nickname].GameOption.Sound_effect = iPacket.ReadByte();
+                        ProfileService.ProfileConfigs[this.Parent.Nickname].GameOption.Full_screen = iPacket.ReadByte();
+                        ProfileService.ProfileConfigs[this.Parent.Nickname].GameOption.ShowMirror = iPacket.ReadByte();
+                        ProfileService.ProfileConfigs[this.Parent.Nickname].GameOption.ShowOtherPlayerNames = iPacket.ReadByte();
+                        ProfileService.ProfileConfigs[this.Parent.Nickname].GameOption.ShowOutlines = iPacket.ReadByte();
+                        ProfileService.ProfileConfigs[this.Parent.Nickname].GameOption.ShowShadows = iPacket.ReadByte();
+                        ProfileService.ProfileConfigs[this.Parent.Nickname].GameOption.HighLevelEffect = iPacket.ReadByte();
+                        ProfileService.ProfileConfigs[this.Parent.Nickname].GameOption.MotionBlurEffect = iPacket.ReadByte();
+                        ProfileService.ProfileConfigs[this.Parent.Nickname].GameOption.MotionDistortionEffect = iPacket.ReadByte();
+                        ProfileService.ProfileConfigs[this.Parent.Nickname].GameOption.HighEndOptimization = iPacket.ReadByte();//오토 레디
+                        ProfileService.ProfileConfigs[this.Parent.Nickname].GameOption.AutoReady = iPacket.ReadByte();//아이템 설명
+                        ProfileService.ProfileConfigs[this.Parent.Nickname].GameOption.PropDescription = iPacket.ReadByte();//녹화 품질
+                        ProfileService.ProfileConfigs[this.Parent.Nickname].GameOption.VideoQuality = iPacket.ReadByte();
+                        ProfileService.ProfileConfigs[this.Parent.Nickname].GameOption.BGM_Check = iPacket.ReadByte();//배경음
+                        ProfileService.ProfileConfigs[this.Parent.Nickname].GameOption.Sound_Check = iPacket.ReadByte();//효과음
+                        ProfileService.ProfileConfigs[this.Parent.Nickname].GameOption.ShowHitInfo = iPacket.ReadByte();
+                        ProfileService.ProfileConfigs[this.Parent.Nickname].GameOption.AutoBoost = iPacket.ReadByte();
+                        ProfileService.ProfileConfigs[this.Parent.Nickname].GameOption.GameType = iPacket.ReadByte();//팀전 개인전 여부
+                        ProfileService.ProfileConfigs[this.Parent.Nickname].GameOption.SetGhost = iPacket.ReadByte();//고스트 사용여부
+                        ProfileService.ProfileConfigs[this.Parent.Nickname].GameOption.SpeedType = iPacket.ReadByte();//채널 속도
+                        ProfileService.ProfileConfigs[this.Parent.Nickname].GameOption.RoomChat = iPacket.ReadByte();
+                        ProfileService.ProfileConfigs[this.Parent.Nickname].GameOption.DrivingChat = iPacket.ReadByte();
+                        ProfileService.ProfileConfigs[this.Parent.Nickname].GameOption.ShowAllPlayerHitInfo = iPacket.ReadByte();
+                        ProfileService.ProfileConfigs[this.Parent.Nickname].GameOption.ShowTeamColor = iPacket.ReadByte();
+                        ProfileService.ProfileConfigs[this.Parent.Nickname].GameOption.Set_screen = iPacket.ReadByte();
+                        ProfileService.ProfileConfigs[this.Parent.Nickname].GameOption.HideCompetitiveRank = iPacket.ReadByte();
+                        ProfileService.Save(this.Parent.Nickname);
                         return;
                     }
                     else if (hash == Adler32Helper.GenerateAdler32_ASCII("PqGetGameOption", 0))
                     {
-                        GameSupport.PrGetGameOption(this.Parent, Nickname);
+                        GameSupport.PrGetGameOption(this.Parent, this.Parent.Nickname);
                         return;
                     }
                     else if (hash == Adler32Helper.GenerateAdler32_ASCII("PqVipInfo", 0))
@@ -414,22 +414,22 @@ namespace KartRider
                     {
                         using (OutPacket outPacket = new OutPacket("PrLoginVipInfo"))
                         {
-                            outPacket.WriteShort((short)ProfileService.ProfileConfigs[Nickname].Rider.Premium);
-                            if (ProfileService.ProfileConfigs[Nickname].Rider.Premium == 0)
+                            outPacket.WriteShort((short)ProfileService.ProfileConfigs[this.Parent.Nickname].Rider.Premium);
+                            if (ProfileService.ProfileConfigs[this.Parent.Nickname].Rider.Premium == 0)
                                 outPacket.WriteInt(0);
-                            else if (ProfileService.ProfileConfigs[Nickname].Rider.Premium == 1)
+                            else if (ProfileService.ProfileConfigs[this.Parent.Nickname].Rider.Premium == 1)
                                 outPacket.WriteInt(10000);
-                            else if (ProfileService.ProfileConfigs[Nickname].Rider.Premium == 2)
+                            else if (ProfileService.ProfileConfigs[this.Parent.Nickname].Rider.Premium == 2)
                                 outPacket.WriteInt(30000);
-                            else if (ProfileService.ProfileConfigs[Nickname].Rider.Premium == 3)
+                            else if (ProfileService.ProfileConfigs[this.Parent.Nickname].Rider.Premium == 3)
                                 outPacket.WriteInt(60000);
-                            else if (ProfileService.ProfileConfigs[Nickname].Rider.Premium == 4)
+                            else if (ProfileService.ProfileConfigs[this.Parent.Nickname].Rider.Premium == 4)
                                 outPacket.WriteInt(120000);
-                            else if (ProfileService.ProfileConfigs[Nickname].Rider.Premium == 5)
+                            else if (ProfileService.ProfileConfigs[this.Parent.Nickname].Rider.Premium == 5)
                                 outPacket.WriteInt(200000);
                             else
                                 outPacket.WriteInt(0);
-                            outPacket.WriteShort((short)ProfileService.ProfileConfigs[Nickname].Rider.Premium);
+                            outPacket.WriteShort((short)ProfileService.ProfileConfigs[this.Parent.Nickname].Rider.Premium);
                             outPacket.WriteByte();
                             outPacket.WriteDateTime(DateTime.Now);
                             outPacket.WriteInt();
@@ -446,57 +446,44 @@ namespace KartRider
                     {
                         if (hash == 1733888222)//ChReRqEnterMyRoomPacket
                         {
-                            ProfileService.ProfileConfigs[Nickname].Rider.EnterMyRoomType = 0;
+                            ProfileService.ProfileConfigs[this.Parent.Nickname].Rider.EnterMyRoomType = 0;
                         }
                         else if (hash == 2423851656)//ChRqEnterRandomMyRoomPacket
                         {
-                            ProfileService.ProfileConfigs[Nickname].Rider.EnterMyRoomType = 5;
+                            ProfileService.ProfileConfigs[this.Parent.Nickname].Rider.EnterMyRoomType = 5;
                         }
-                        GameSupport.ChRpEnterMyRoomPacket(this.Parent, Nickname);
-                        ProfileService.Save(Nickname);
+                        GameSupport.ChRpEnterMyRoomPacket(this.Parent, this.Parent.Nickname);
+                        ProfileService.Save(this.Parent.Nickname);
                         return;
                     }
                     else if (hash == Adler32Helper.GenerateAdler32_ASCII("ChRqEnterMyRoomPacket", 0))
                     {
                         string nickname = iPacket.ReadString(false);
-                        if (nickname == Nickname)
+                        if (nickname == this.Parent.Nickname)
                         {
-                            ProfileService.ProfileConfigs[Nickname].Rider.EnterMyRoomType = 0;
+                            ProfileService.ProfileConfigs[this.Parent.Nickname].Rider.EnterMyRoomType = 0;
                         }
                         else
                         {
-                            ProfileService.ProfileConfigs[Nickname].Rider.EnterMyRoomType = 3;
+                            ProfileService.ProfileConfigs[this.Parent.Nickname].Rider.EnterMyRoomType = 3;
                         }
-                        GameSupport.ChRpEnterMyRoomPacket(this.Parent, Nickname);
-                        ProfileService.Save(Nickname);
+                        GameSupport.ChRpEnterMyRoomPacket(this.Parent, this.Parent.Nickname);
+                        ProfileService.Save(this.Parent.Nickname);
                         return;
                     }
                     else if (hash == Adler32Helper.GenerateAdler32_ASCII("RmFirstRequestPacket", 0))
                     {
                         using (OutPacket outPacket = new OutPacket("RmSlotDataPacket"))
                         {
-                            outPacket.WriteUInt(ClientManager.GetUserNO(Nickname));
-                            if (ClientManager.ClientP2pAddrs.TryGetValue(Nickname, out IPEndPoint P2pPoint))
-                            {
-                                outPacket.WriteEndPoint(P2pPoint);
-                            }
-                            else
-                            {
-                                outPacket.WriteEndPoint(new IPEndPoint(IPAddress.Any, (ushort)(ProfileService.SettingConfig.ServerPort + 1)));
-                            }
-                            if (ClientManager.ClientUdpAddrs.TryGetValue(Nickname, out IPEndPoint UdpPoint))
-                            {
-                                outPacket.WriteEndPoint(UdpPoint);
-                            }
-                            else
-                            {
-                                outPacket.WriteEndPoint(new IPEndPoint(IPAddress.Any, ProfileService.SettingConfig.ServerPort));
-                            }
-                            outPacket.WriteString(Nickname);
-                            GameSupport.GetRider(Nickname, outPacket);
-                            outPacket.WriteUInt(ProfileService.ProfileConfigs[Nickname].Rider.RP);
+                            outPacket.WriteUInt(ClientManager.GetUserNO(this.Parent.Nickname));
+                            IPEndPoint client = ClientManager.ClientToIPEndPoint(ProfileService.ProfileConfigs[this.Parent.Nickname].Rider.ClientId);
+                            outPacket.WriteEndPoint(new IPEndPoint(client.Address, ProfileService.ProfileConfigs[this.Parent.Nickname].Rider.P2pPort));
+                            outPacket.WriteEndPoint(new IPEndPoint(client.Address, ProfileService.ProfileConfigs[this.Parent.Nickname].Rider.UdpPort));
+                            outPacket.WriteString(this.Parent.Nickname);
+                            GameSupport.GetRider(this.Parent.Nickname, outPacket);
+                            outPacket.WriteUInt(ProfileService.ProfileConfigs[this.Parent.Nickname].Rider.RP);
                             outPacket.WriteBytes(new byte[29]);
-                            outPacket.WriteString(ProfileService.ProfileConfigs[Nickname].Rider.ClubName);
+                            outPacket.WriteString(ProfileService.ProfileConfigs[this.Parent.Nickname].Rider.ClubName);
                             outPacket.WriteByte();
                             for (int i = 0; i < 7; i++)
                             {
@@ -508,19 +495,19 @@ namespace KartRider
                     }
                     else if (hash == Adler32Helper.GenerateAdler32_ASCII("RmNotiMyRoomInfoPacket", 0))
                     {
-                        ProfileService.ProfileConfigs[Nickname].MyRoom.MyRoom = iPacket.ReadShort();
-                        ProfileService.ProfileConfigs[Nickname].MyRoom.MyRoomBGM = iPacket.ReadByte();
-                        ProfileService.ProfileConfigs[Nickname].MyRoom.UseRoomPwd = iPacket.ReadByte();
+                        ProfileService.ProfileConfigs[this.Parent.Nickname].MyRoom.MyRoom = iPacket.ReadShort();
+                        ProfileService.ProfileConfigs[this.Parent.Nickname].MyRoom.MyRoomBGM = iPacket.ReadByte();
+                        ProfileService.ProfileConfigs[this.Parent.Nickname].MyRoom.UseRoomPwd = iPacket.ReadByte();
                         iPacket.ReadByte();
-                        ProfileService.ProfileConfigs[Nickname].MyRoom.UseItemPwd = iPacket.ReadByte();
-                        ProfileService.ProfileConfigs[Nickname].MyRoom.TalkLock = iPacket.ReadByte();
-                        ProfileService.ProfileConfigs[Nickname].MyRoom.RoomPwd = iPacket.ReadString(false);
+                        ProfileService.ProfileConfigs[this.Parent.Nickname].MyRoom.UseItemPwd = iPacket.ReadByte();
+                        ProfileService.ProfileConfigs[this.Parent.Nickname].MyRoom.TalkLock = iPacket.ReadByte();
+                        ProfileService.ProfileConfigs[this.Parent.Nickname].MyRoom.RoomPwd = iPacket.ReadString(false);
                         iPacket.ReadString(false);
-                        ProfileService.ProfileConfigs[Nickname].MyRoom.ItemPwd = iPacket.ReadString(false);
-                        ProfileService.ProfileConfigs[Nickname].MyRoom.MyRoomKart1 = iPacket.ReadShort();
-                        ProfileService.ProfileConfigs[Nickname].MyRoom.MyRoomKart2 = iPacket.ReadShort();
-                        ProfileService.Save(Nickname);
-                        GameSupport.RmNotiMyRoomInfoPacket(this.Parent, Nickname);
+                        ProfileService.ProfileConfigs[this.Parent.Nickname].MyRoom.ItemPwd = iPacket.ReadString(false);
+                        ProfileService.ProfileConfigs[this.Parent.Nickname].MyRoom.MyRoomKart1 = iPacket.ReadShort();
+                        ProfileService.ProfileConfigs[this.Parent.Nickname].MyRoom.MyRoomKart2 = iPacket.ReadShort();
+                        ProfileService.Save(this.Parent.Nickname);
+                        GameSupport.RmNotiMyRoomInfoPacket(this.Parent, this.Parent.Nickname);
                         return;
                     }
                     else if (hash == Adler32Helper.GenerateAdler32_ASCII("ChRqSecedeMyRoomPacket", 0))
@@ -535,21 +522,21 @@ namespace KartRider
                     }
                     else if (hash == Adler32Helper.GenerateAdler32_ASCII("PqStartScenario", 0))
                     {
-                        ProfileService.ProfileConfigs[Nickname].Rider.ScenarioType = iPacket.ReadInt();
+                        ProfileService.ProfileConfigs[this.Parent.Nickname].Rider.ScenarioType = iPacket.ReadInt();
                         using (OutPacket outPacket = new OutPacket("PrStartScenario"))
                         {
-                            outPacket.WriteInt(ProfileService.ProfileConfigs[Nickname].Rider.ScenarioType);
+                            outPacket.WriteInt(ProfileService.ProfileConfigs[this.Parent.Nickname].Rider.ScenarioType);
                             outPacket.WriteByte(0);
                             this.Parent.Client.Send(outPacket);
                         }
-                        ProfileService.Save(Nickname);
+                        ProfileService.Save(this.Parent.Nickname);
                         return;
                     }
                     else if (hash == Adler32Helper.GenerateAdler32_ASCII("PqCompleteScenarioSingle", 0))
                     {
                         using (OutPacket outPacket = new OutPacket("PrCompleteScenarioSingle"))
                         {
-                            outPacket.WriteInt(ProfileService.ProfileConfigs[Nickname].Rider.ScenarioType);
+                            outPacket.WriteInt(ProfileService.ProfileConfigs[this.Parent.Nickname].Rider.ScenarioType);
                             outPacket.WriteByte(0);
                             this.Parent.Client.Send(outPacket);
                         }
@@ -561,7 +548,7 @@ namespace KartRider
                         var Kart_id = iPacket.ReadShort();
                         var FlyingPet_id = iPacket.ReadShort();
                         byte StartType = 1;
-                        StartGameData.Start_KartSpac(this.Parent, Nickname, StartType, 0, 0, 0, StartTimeAttack_SpeedType);
+                        StartGameData.Start_KartSpac(this.Parent, this.Parent.Nickname, StartType, 0, 0, 0, StartTimeAttack_SpeedType);
                         return;
                     }
                     else if (hash == Adler32Helper.GenerateAdler32_ASCII("PqChapterInfoPacket", 0))
@@ -620,7 +607,7 @@ namespace KartRider
                         var Kart_id = iPacket.ReadShort();
                         var FlyingPet_id = iPacket.ReadShort();
                         byte StartType = 2;
-                        StartGameData.Start_KartSpac(this.Parent, Nickname, StartType, 0, 0, 0, StartTimeAttack_SpeedType);
+                        StartGameData.Start_KartSpac(this.Parent, this.Parent.Nickname, StartType, 0, 0, 0, StartTimeAttack_SpeedType);
                         return;
                     }
                     else if (hash == Adler32Helper.GenerateAdler32_ASCII("PqCompleteChallenger", 0))
@@ -671,10 +658,10 @@ namespace KartRider
                             outPacket.WriteShort(0);
                             outPacket.WriteShort(0);
                             outPacket.WriteShort(0);
-                            outPacket.WriteUInt(ProfileService.ProfileConfigs[Nickname].Rider.Koin);
+                            outPacket.WriteUInt(ProfileService.ProfileConfigs[this.Parent.Nickname].Rider.Koin);
                             this.Parent.Client.Send(outPacket);
                         }
-                        KartExcData.AddLevelList(Nickname, Kart, SN, 5, 35, 0, 0, 0, 0, 0);
+                        KartExcData.AddLevelList(this.Parent.Nickname, Kart, SN, 5, 35, 0, 0, 0, 0, 0);
                         return;
                     }
                     else if (hash == Adler32Helper.GenerateAdler32_ASCII("PqDisassembleXPartsItem", 0))
@@ -702,12 +689,12 @@ namespace KartRider
                             outPacket.WriteShort(0);
                             outPacket.WriteShort(0);
                             outPacket.WriteInt(0);
-                            outPacket.WriteUInt(ProfileService.ProfileConfigs[Nickname].Rider.Lucci);
-                            outPacket.WriteUInt(ProfileService.ProfileConfigs[Nickname].Rider.Koin);
+                            outPacket.WriteUInt(ProfileService.ProfileConfigs[this.Parent.Nickname].Rider.Lucci);
+                            outPacket.WriteUInt(ProfileService.ProfileConfigs[this.Parent.Nickname].Rider.Koin);
                             outPacket.WriteBytes(new byte[20]);
                             this.Parent.Client.Send(outPacket);
                         }
-                        NewRider.AddNewKart(this.Parent, Nickname, Kart);
+                        NewRider.AddNewKart(this.Parent, this.Parent.Nickname, Kart);
                         return;
                     }
                     else if (hash == Adler32Helper.GenerateAdler32_ASCII("PqKartLevelUpProbText", 0))
@@ -744,12 +731,12 @@ namespace KartRider
                             outPacket.WriteInt(0);
                             outPacket.WriteShort(0);//Kart2
                             outPacket.WriteShort(0);//SN2
-                            outPacket.WriteUInt(ProfileService.ProfileConfigs[Nickname].Rider.Koin);
-                            outPacket.WriteUInt(ProfileService.ProfileConfigs[Nickname].Rider.Lucci);
+                            outPacket.WriteUInt(ProfileService.ProfileConfigs[this.Parent.Nickname].Rider.Koin);
+                            outPacket.WriteUInt(ProfileService.ProfileConfigs[this.Parent.Nickname].Rider.Lucci);
                             outPacket.WriteInt(0);
                             this.Parent.Client.Send(outPacket);
                         }
-                        KartExcData.AddLevelList(Nickname, Kart, SN, 5, 35, 0, 0, 0, 0, 0);
+                        KartExcData.AddLevelList(this.Parent.Nickname, Kart, SN, 5, 35, 0, 0, 0, 0, 0);
                         return;
                     }
                     else if (hash == Adler32Helper.GenerateAdler32_ASCII("PqKartLevelPointUpdate", 0))
@@ -776,11 +763,11 @@ namespace KartRider
                             outPacket.WriteShort(Effect);
                             this.Parent.Client.Send(outPacket);
                         }
-                        if (!FileName.FileNames.ContainsKey(Nickname))
+                        if (!FileName.FileNames.ContainsKey(this.Parent.Nickname))
                         {
-                            FileName.Load(Nickname);
+                            FileName.Load(this.Parent.Nickname);
                         }
-                        var filename = FileName.FileNames[Nickname];
+                        var filename = FileName.FileNames[this.Parent.Nickname];
                         var LevelList = new List<Level>();
                         if (File.Exists(filename.LevelData_LoadFile))
                         {
@@ -790,7 +777,7 @@ namespace KartRider
                         if (existingLevelList == null)
                         {
                             pointleft = (short)(35 - v1 - v2 - v3 - v4);
-                            KartExcData.AddLevelList(Nickname, Kart, SN, 5, pointleft, v1, v2, v3, v4, 0);
+                            KartExcData.AddLevelList(this.Parent.Nickname, Kart, SN, 5, pointleft, v1, v2, v3, v4, 0);
                         }
                         else
                         {
@@ -800,7 +787,7 @@ namespace KartRider
                             short v3New = (short)(existingLevelList.Level3 + v3);
                             short v4New = (short)(existingLevelList.Level4 + v4);
                             short effect = existingLevelList.Effect;
-                            KartExcData.AddLevelList(Nickname, Kart, SN, 5, pointleft, v1New, v2New, v3New, v4New, effect);
+                            KartExcData.AddLevelList(this.Parent.Nickname, Kart, SN, 5, pointleft, v1New, v2New, v3New, v4New, effect);
                         }
                         return;
                     }
@@ -819,11 +806,11 @@ namespace KartRider
                         short SN = iPacket.ReadShort();
                         short Effect = iPacket.ReadShort();
 
-                        if (!FileName.FileNames.ContainsKey(Nickname))
+                        if (!FileName.FileNames.ContainsKey(this.Parent.Nickname))
                         {
-                            FileName.Load(Nickname);
+                            FileName.Load(this.Parent.Nickname);
                         }
-                        var filename = FileName.FileNames[Nickname];
+                        var filename = FileName.FileNames[this.Parent.Nickname];
                         var LevelList = new List<Level>();
                         if (File.Exists(filename.LevelData_LoadFile))
                         {
@@ -845,7 +832,7 @@ namespace KartRider
                                 outPacket.WriteShort(existingLevelList.Level3);
                                 outPacket.WriteShort(existingLevelList.Level4);
                                 outPacket.WriteShort(Effect);
-                                KartExcData.AddLevelList(Nickname, Kart, SN, existingLevelList.Grade, existingLevelList.Points, existingLevelList.Level1, existingLevelList.Level2, existingLevelList.Level3, existingLevelList.Level4, Effect);
+                                KartExcData.AddLevelList(this.Parent.Nickname, Kart, SN, existingLevelList.Grade, existingLevelList.Points, existingLevelList.Level1, existingLevelList.Level2, existingLevelList.Level3, existingLevelList.Level4, Effect);
                             }
                             else
                             {
@@ -856,7 +843,7 @@ namespace KartRider
                                 outPacket.WriteShort(10);
                                 outPacket.WriteShort(5);
                                 outPacket.WriteShort(Effect);
-                                KartExcData.AddLevelList(Nickname, Kart, SN, 5, 0, 10, 10, 10, 5, Effect);
+                                KartExcData.AddLevelList(this.Parent.Nickname, Kart, SN, 5, 0, 10, 10, 10, 5, Effect);
                             }
                             this.Parent.Client.Send(outPacket);
                         }
@@ -881,7 +868,7 @@ namespace KartRider
                             outPacket.WriteHexString("00 00 00 00 FF FF 00 00 00 00 00 00 00 00");
                             this.Parent.Client.Send(outPacket);
                         }
-                        KartExcData.AddTuneList(Nickname, Kart, KartSN, 0, 0, 0, -1, 0, -1, 0);
+                        KartExcData.AddTuneList(this.Parent.Nickname, Kart, KartSN, 0, 0, 0, -1, 0, -1, 0);
                         return;
                     }
                     else if (hash == Adler32Helper.GenerateAdler32_ASCII("PqUseTuneItem", 0))
@@ -893,11 +880,11 @@ namespace KartRider
                         short KartSN = iPacket.ReadShort();
 
                         Random random = new Random();
-                        if (!FileName.FileNames.ContainsKey(Nickname))
+                        if (!FileName.FileNames.ContainsKey(this.Parent.Nickname))
                         {
-                            FileName.Load(Nickname);
+                            FileName.Load(this.Parent.Nickname);
                         }
-                        var filename = FileName.FileNames[Nickname];
+                        var filename = FileName.FileNames[this.Parent.Nickname];
                         var TuneList = new List<Tune>();
                         if (File.Exists(filename.TuneData_LoadFile))
                         {
@@ -928,7 +915,7 @@ namespace KartRider
                                 existingList.Tune1 = 603;
                                 existingList.Tune2 = 703;
                                 existingList.Tune3 = 903;
-                                KartExcData.AddTuneList(Nickname, Kart, KartSN, existingList.Tune1, existingList.Tune2, existingList.Tune3, existingList.Slot1, existingList.Count1, existingList.Slot2, existingList.Count2);
+                                KartExcData.AddTuneList(this.Parent.Nickname, Kart, KartSN, existingList.Tune1, existingList.Tune2, existingList.Tune3, existingList.Slot1, existingList.Count1, existingList.Slot2, existingList.Count2);
                             }
                             else
                             {
@@ -1012,7 +999,7 @@ namespace KartRider
                                     this.Parent.Client.Send(outPacket);
                                 }
                             }
-                            KartExcData.AddTuneList(Nickname, Kart, KartSN, existingList.Tune1, existingList.Tune2, existingList.Tune3, existingList.Slot1, existingList.Count1, existingList.Slot2, existingList.Count2);
+                            KartExcData.AddTuneList(this.Parent.Nickname, Kart, KartSN, existingList.Tune1, existingList.Tune2, existingList.Tune3, existingList.Slot1, existingList.Count1, existingList.Slot2, existingList.Count2);
                         }
                         return;
                     }
@@ -1026,11 +1013,11 @@ namespace KartRider
                         iPacket.ReadShort();
                         short slot = iPacket.ReadShort();
 
-                        if (!FileName.FileNames.ContainsKey(Nickname))
+                        if (!FileName.FileNames.ContainsKey(this.Parent.Nickname))
                         {
-                            FileName.Load(Nickname);
+                            FileName.Load(this.Parent.Nickname);
                         }
-                        var filename = FileName.FileNames[Nickname];
+                        var filename = FileName.FileNames[this.Parent.Nickname];
                         var TuneList = new List<Tune>();
                         if (File.Exists(filename.TuneData_LoadFile))
                         {
@@ -1079,7 +1066,7 @@ namespace KartRider
                                     outPacket.WriteShort(existingList.Count2);
                                 }
                                 this.Parent.Client.Send(outPacket);
-                                KartExcData.AddTuneList(Nickname, Kart, KartSN, existingList.Tune1, existingList.Tune2, existingList.Tune3, existingList.Slot1, existingList.Count1, existingList.Slot2, existingList.Count2);
+                                KartExcData.AddTuneList(this.Parent.Nickname, Kart, KartSN, existingList.Tune1, existingList.Tune2, existingList.Tune3, existingList.Slot1, existingList.Count1, existingList.Slot2, existingList.Count2);
                             }
                         }
                         return;
@@ -1092,11 +1079,11 @@ namespace KartRider
                         iPacket.ReadShort();
                         short KartSN = iPacket.ReadShort();
 
-                        if (!FileName.FileNames.ContainsKey(Nickname))
+                        if (!FileName.FileNames.ContainsKey(this.Parent.Nickname))
                         {
-                            FileName.Load(Nickname);
+                            FileName.Load(this.Parent.Nickname);
                         }
-                        var filename = FileName.FileNames[Nickname];
+                        var filename = FileName.FileNames[this.Parent.Nickname];
                         var TuneList = new List<Tune>();
                         if (File.Exists(filename.TuneData_LoadFile))
                         {
@@ -1160,7 +1147,7 @@ namespace KartRider
                                 }
                             }
                             Console.WriteLine("TuneList: " + existingList.Tune1 + ", " + existingList.Tune2 + ", " + existingList.Tune3);
-                            KartExcData.AddTuneList(Nickname, Kart, KartSN, existingList.Tune1, existingList.Tune2, existingList.Tune3, existingList.Slot1, existingList.Count1, existingList.Slot2, existingList.Count2);
+                            KartExcData.AddTuneList(this.Parent.Nickname, Kart, KartSN, existingList.Tune1, existingList.Tune2, existingList.Tune3, existingList.Slot1, existingList.Count1, existingList.Slot2, existingList.Count2);
                         }
                         return;
                     }
@@ -1171,7 +1158,7 @@ namespace KartRider
                         short Kart = iPacket.ReadShort();
                         short Kart_Id = iPacket.ReadShort();
                         short SN = iPacket.ReadShort();
-                        KartExcData.AddPlantList(Nickname, Kart_Id, SN, Item, Item_Id);
+                        KartExcData.AddPlantList(this.Parent.Nickname, Kart_Id, SN, Item, Item_Id);
                         using (OutPacket outPacket = new OutPacket("PrEquipTuningPacket"))
                         {
                             outPacket.WriteByte(1);
@@ -1197,7 +1184,7 @@ namespace KartRider
                             outPacket.WriteShort(item);
                             this.Parent.Client.Send(outPacket);
                         }
-                        KartExcData.AddPartsList(Nickname, Kart, SN, item, 0, 0, 0);
+                        KartExcData.AddPartsList(this.Parent.Nickname, Kart, SN, item, 0, 0, 0);
                         return;
                     }
                     else if (hash == Adler32Helper.GenerateAdler32_ASCII("PqEquipXPartsItem", 0))
@@ -1227,7 +1214,7 @@ namespace KartRider
                             outPacket.WriteShort(Unk3);
                             this.Parent.Client.Send(outPacket);
                         }
-                        KartExcData.AddPartsList(Nickname, Kart, KartSN, Item_Cat_Id, Item_Id, Grade, PartsValue);
+                        KartExcData.AddPartsList(this.Parent.Nickname, Kart, KartSN, Item_Cat_Id, Item_Id, Grade, PartsValue);
                         Console.WriteLine("ClientSession : Kart: {0}, KartSN: {1}, Item: {2}:{3}, Quantity: {4}, Grade: {5}, PartsValue: {6}", Kart, KartSN, Item_Cat_Id, Item_Id, Quantity, Grade, PartsValue);
                         return;
                     }
@@ -1260,7 +1247,7 @@ namespace KartRider
                             outPacket.WriteInt(TimeAttack.MissionList.Count);
                             foreach (string Track in TimeAttack.MissionList)
                             {
-                                byte Level = TimeAttack.GetTrackLevel(Nickname, Adler32Helper.GenerateAdler32_UNICODE(Track, 0));
+                                byte Level = TimeAttack.GetTrackLevel(this.Parent.Nickname, Adler32Helper.GenerateAdler32_UNICODE(Track, 0));
                                 outPacket.WriteByte(Level);
                                 outPacket.WriteInt(0);
                             }
@@ -1296,8 +1283,8 @@ namespace KartRider
                     else if (hash == Adler32Helper.GenerateAdler32_ASCII("LoRqGetTrackRankPacket", 0))
                     {
                         uint track = iPacket.ReadUInt();
-                        ProfileService.ProfileConfigs[Nickname].Rider.Track = track;
-                        ProfileService.Save(Nickname);
+                        ProfileService.ProfileConfigs[this.Parent.Nickname].Rider.Track = track;
+                        ProfileService.Save(this.Parent.Nickname);
                         byte SpeedType = iPacket.ReadByte();
                         byte GameType = iPacket.ReadByte();
                         using (OutPacket outPacket = new OutPacket("LoRpGetTrackRankPacket"))
@@ -1321,11 +1308,11 @@ namespace KartRider
                             byte Add_Del = iPacket.ReadByte(); //1添加，2删除
                             if (Add_Del == 1)
                             {
-                                FavoriteItem.Favorite_Track_Add(Nickname, theme, track);
+                                FavoriteItem.Favorite_Track_Add(this.Parent.Nickname, theme, track);
                             }
                             else if (Add_Del == 2)
                             {
-                                FavoriteItem.Favorite_Track_Del(Nickname, theme, track);
+                                FavoriteItem.Favorite_Track_Del(this.Parent.Nickname, theme, track);
                             }
                         }
                         return;
@@ -1334,8 +1321,8 @@ namespace KartRider
                     {
                         iPacket.ReadByte();
                         uint Lucci = iPacket.ReadUInt();
-                        ProfileService.ProfileConfigs[Nickname].Rider.Lucci -= Lucci;
-                        ProfileService.Save(Nickname);
+                        ProfileService.ProfileConfigs[this.Parent.Nickname].Rider.Lucci -= Lucci;
+                        ProfileService.Save(this.Parent.Nickname);
                         return;
                     }
                     else if (hash == Adler32Helper.GenerateAdler32_ASCII("PqStartTimeAttack", 0))
@@ -1351,20 +1338,20 @@ namespace KartRider
                         var StartTimeAttack_Unk3 = iPacket.ReadInt();
                         var StartTimeAttack_Unk4 = iPacket.ReadInt();
                         var StartTimeAttack_Unk5 = iPacket.ReadByte();
-                        ProfileService.ProfileConfigs[Nickname].Rider.AttackType = iPacket.ReadByte();
+                        ProfileService.ProfileConfigs[this.Parent.Nickname].Rider.AttackType = iPacket.ReadByte();
                         var StartTimeAttack_TimaAttackMpdeType = iPacket.ReadByte();
                         var StartTimeAttack_TimaAttackMpde = iPacket.ReadInt();
                         var StartTimeAttack_RandomTrackGameType = iPacket.ReadByte();
                         if (StartTimeAttack_TimaAttackMpdeType == 1)
                         {
-                            ProfileService.ProfileConfigs[Nickname].Rider.Lucci -= 1000;
-                            ProfileService.Save(Nickname);
+                            ProfileService.ProfileConfigs[this.Parent.Nickname].Rider.Lucci -= 1000;
+                            ProfileService.Save(this.Parent.Nickname);
                         }
-                        Console.WriteLine("StartTimeAttack: {0} / {1} / {2} / {3} / {4} / {5} / {6} / {7}", StartTimeAttack_SpeedType, StartTimeAttack_GameType, Kart_id, FlyingPet_id, RandomTrack.GetTrackName(StartTimeAttack_Track), StartTimeAttack_StartType, ProfileService.ProfileConfigs[Nickname].Rider.AttackType, StartTimeAttack_TimaAttackMpdeType);
+                        Console.WriteLine("StartTimeAttack: {0} / {1} / {2} / {3} / {4} / {5} / {6} / {7}", StartTimeAttack_SpeedType, StartTimeAttack_GameType, Kart_id, FlyingPet_id, RandomTrack.GetTrackName(StartTimeAttack_Track), StartTimeAttack_StartType, ProfileService.ProfileConfigs[this.Parent.Nickname].Rider.AttackType, StartTimeAttack_TimaAttackMpdeType);
                         byte StartType = 3;
-                        ProfileService.ProfileConfigs[Nickname].Rider.Track = RandomTrack.GetRandomTrack(Nickname, StartTimeAttack_RandomTrackGameType, StartTimeAttack_Track);
-                        StartGameData.Start_KartSpac(this.Parent, Nickname, StartType, StartTimeAttack_StartType, StartTimeAttack_Unk1, ProfileService.ProfileConfigs[Nickname].Rider.Track, StartTimeAttack_SpeedType);
-                        ProfileService.Save(Nickname);
+                        ProfileService.ProfileConfigs[this.Parent.Nickname].Rider.Track = RandomTrack.GetRandomTrack(this.Parent.Nickname, StartTimeAttack_RandomTrackGameType, StartTimeAttack_Track);
+                        StartGameData.Start_KartSpac(this.Parent, this.Parent.Nickname, StartType, StartTimeAttack_StartType, StartTimeAttack_Unk1, ProfileService.ProfileConfigs[this.Parent.Nickname].Rider.Track, StartTimeAttack_SpeedType);
+                        ProfileService.Save(this.Parent.Nickname);
                         return;
                     }
                     else if (hash == Adler32Helper.GenerateAdler32_ASCII("PqFinishTimeAttack", 0))
@@ -1377,13 +1364,13 @@ namespace KartRider
                         iPacket.ReadInt(); //使用加速器次数
                         iPacket.ReadInt(); //碰撞次数
                         uint time = iPacket.ReadUInt();
-                        if (!Time.ContainsKey(Nickname))
+                        if (!Time.ContainsKey(this.Parent.Nickname))
                         {
-                            Time.TryAdd(Nickname, time);
+                            Time.TryAdd(this.Parent.Nickname, time);
                         }
                         else
                         {
-                            Time[Nickname] = time;
+                            Time[this.Parent.Nickname] = time;
                         }
                         TimeSpan timeSpan = TimeSpan.FromMilliseconds((long)time);
                         uint min = (uint)timeSpan.Minutes;
@@ -1391,21 +1378,21 @@ namespace KartRider
                         uint mil = (uint)timeSpan.Milliseconds;
                         if (RewardType == 0)
                         {
-                            ProfileService.ProfileConfigs[Nickname].Rider.RP += 10;
-                            ProfileService.ProfileConfigs[Nickname].Rider.Lucci += 20;
+                            ProfileService.ProfileConfigs[this.Parent.Nickname].Rider.RP += 10;
+                            ProfileService.ProfileConfigs[this.Parent.Nickname].Rider.Lucci += 20;
                         }
                         else if (RewardType == 1)
                         {
-                            ProfileService.ProfileConfigs[Nickname].Rider.RP += 20;
-                            ProfileService.ProfileConfigs[Nickname].Rider.Lucci += 50;
+                            ProfileService.ProfileConfigs[this.Parent.Nickname].Rider.RP += 20;
+                            ProfileService.ProfileConfigs[this.Parent.Nickname].Rider.Lucci += 50;
                         }
-                        Console.WriteLine("FinishTimeAttack: {0} / {1} / {2}:{3}:{4}", RewardType, RandomTrack.GetTrackName(ProfileService.ProfileConfigs[Nickname].Rider.Track), min, sec, mil);
+                        Console.WriteLine("FinishTimeAttack: {0} / {1} / {2}:{3}:{4}", RewardType, RandomTrack.GetTrackName(ProfileService.ProfileConfigs[this.Parent.Nickname].Rider.Track), min, sec, mil);
                         using (OutPacket outPacket = new OutPacket("PrFinishTimeAttack"))
                         {
                             outPacket.WriteInt(type);
-                            if (ProfileService.ProfileConfigs[Nickname].Rider.AttackType == 0 && RewardType == 1)
+                            if (ProfileService.ProfileConfigs[this.Parent.Nickname].Rider.AttackType == 0 && RewardType == 1)
                             {
-                                byte Level = TimeAttack.TrainingMission(Nickname, ProfileService.ProfileConfigs[Nickname].Rider.Track);
+                                byte Level = TimeAttack.TrainingMission(this.Parent.Nickname, ProfileService.ProfileConfigs[this.Parent.Nickname].Rider.Track);
                                 outPacket.WriteInt(0);
                                 outPacket.WriteInt(0);
                                 outPacket.WriteByte(0); //完成赛道
@@ -1434,13 +1421,13 @@ namespace KartRider
                         }
                         using (OutPacket outPacket = new OutPacket("PcSlaveNotice"))
                         {
-                            outPacket.WriteString($"{Nickname} / {RandomTrack.GetTrackName(ProfileService.ProfileConfigs[Nickname].Rider.Track)} / {min}:{sec}:{mil}");
+                            outPacket.WriteString($"{this.Parent.Nickname} / {RandomTrack.GetTrackName(ProfileService.ProfileConfigs[this.Parent.Nickname].Rider.Track)} / {min}:{sec}:{mil}");
                             foreach (SessionGroup Session in ClientManager._clientSessions.Values)
                             {
                                 Session.Client.Send(outPacket);
                             }
                         }
-                        ProfileService.Save(Nickname);
+                        ProfileService.Save(this.Parent.Nickname);
                         return;
                     }
                     else if (hash == Adler32Helper.GenerateAdler32_ASCII("PqRewardTimeAttack", 0))
@@ -1450,29 +1437,29 @@ namespace KartRider
                         int Lucci = iPacket.ReadInt();
                         int TimeAttack_StartTicks = iPacket.ReadInt();
                         uint Track = iPacket.ReadUInt();
-                        ProfileService.ProfileConfigs[Nickname].Rider.Track = Track;
+                        ProfileService.ProfileConfigs[this.Parent.Nickname].Rider.Track = Track;
                         Console.WriteLine("RewardTimeAttack : ResultType: {0}, RP: {1}, Lucci: {2}, Track: {3}", RewardType, RP, Lucci, RandomTrack.GetTrackName(Track));
                         if (RewardType == 0)
                         {
-                            ProfileService.ProfileConfigs[Nickname].Rider.RP += 10;
-                            ProfileService.ProfileConfigs[Nickname].Rider.Lucci += 20;
+                            ProfileService.ProfileConfigs[this.Parent.Nickname].Rider.RP += 10;
+                            ProfileService.ProfileConfigs[this.Parent.Nickname].Rider.Lucci += 20;
                         }
                         else if (RewardType == 1)
                         {
-                            ProfileService.ProfileConfigs[Nickname].Rider.RP += 20;
-                            ProfileService.ProfileConfigs[Nickname].Rider.Lucci += 50;
+                            ProfileService.ProfileConfigs[this.Parent.Nickname].Rider.RP += 20;
+                            ProfileService.ProfileConfigs[this.Parent.Nickname].Rider.Lucci += 50;
                         }
-                        ProfileService.Save(Nickname);
+                        ProfileService.Save(this.Parent.Nickname);
                         return;
                     }
                     else if (hash == Adler32Helper.GenerateAdler32_ASCII("LoRqUseItemPacket", 0))
                     {
                         short ItemType = iPacket.ReadShort();
                         short Type = iPacket.ReadShort();
-                        ProfileService.ProfileConfigs[Nickname].Rider.SlotChanger = iPacket.ReadUShort();
+                        ProfileService.ProfileConfigs[this.Parent.Nickname].Rider.SlotChanger = iPacket.ReadUShort();
                         if (Type == 1)
                         {
-                            ProfileService.Save(Nickname);
+                            ProfileService.Save(this.Parent.Nickname);
                         }
                         return;
                     }
@@ -1604,7 +1591,7 @@ namespace KartRider
                     }
                     else if (hash == Adler32Helper.GenerateAdler32_ASCII("PqCheckMyClubStatePacket", 0))
                     {
-                        GameSupport.PrCheckMyClubStatePacket(this.Parent, Nickname);
+                        GameSupport.PrCheckMyClubStatePacket(this.Parent, this.Parent.Nickname);
                         return;
                     }
                     else if (hash == Adler32Helper.GenerateAdler32_ASCII("PqCheckMyLeaveDatePacket", 0))
@@ -1625,8 +1612,8 @@ namespace KartRider
                             outPacket.WriteInt(0);
                             this.Parent.Client.Send(outPacket);
                         }
-                        ProfileService.ProfileConfigs[Nickname].Rider.ClubMark_LOGO = 2;
-                        ProfileService.Save(Nickname);
+                        ProfileService.ProfileConfigs[this.Parent.Nickname].Rider.ClubMark_LOGO = 2;
+                        ProfileService.Save(this.Parent.Nickname);
                         return;
                     }
                     else if (hash == Adler32Helper.GenerateAdler32_ASCII("PqCheckCreateClubConditionPacket", 0))
@@ -1640,18 +1627,18 @@ namespace KartRider
                     }
                     else if (hash == Adler32Helper.GenerateAdler32_ASCII("PqCreateClubPacket", 0))
                     {
-                        ProfileService.ProfileConfigs[Nickname].Rider.ClubName = iPacket.ReadString();
-                        ProfileService.ProfileConfigs[Nickname].Rider.ClubIntro = iPacket.ReadString();
-                        ProfileService.ProfileConfigs[Nickname].Rider.ClubMark_LOGO = iPacket.ReadInt();
-                        ProfileService.Save(Nickname);
+                        ProfileService.ProfileConfigs[this.Parent.Nickname].Rider.ClubName = iPacket.ReadString();
+                        ProfileService.ProfileConfigs[this.Parent.Nickname].Rider.ClubIntro = iPacket.ReadString();
+                        ProfileService.ProfileConfigs[this.Parent.Nickname].Rider.ClubMark_LOGO = iPacket.ReadInt();
+                        ProfileService.Save(this.Parent.Nickname);
                         using (OutPacket outPacket = new OutPacket("PrNewCareerNoticePacket"))
                         {
                             this.Parent.Client.Send(outPacket);
                         }
                         using (OutPacket outPacket = new OutPacket("PrCreateClubPacket"))
                         {
-                            outPacket.WriteInt(ProfileService.ProfileConfigs[Nickname].Rider.ClubCode);
-                            outPacket.WriteInt(ProfileService.ProfileConfigs[Nickname].Rider.ClubMark_LINE);
+                            outPacket.WriteInt(ProfileService.ProfileConfigs[this.Parent.Nickname].Rider.ClubCode);
+                            outPacket.WriteInt(ProfileService.ProfileConfigs[this.Parent.Nickname].Rider.ClubMark_LINE);
                             outPacket.WriteInt(0);
                             this.Parent.Client.Send(outPacket);
                         }
@@ -1670,7 +1657,7 @@ namespace KartRider
                     {
                         using (OutPacket outPacket = new OutPacket("PrInitClubPacket"))
                         {
-                            if (ProfileService.ProfileConfigs[Nickname].Rider.ClubMark_LOGO == 0)
+                            if (ProfileService.ProfileConfigs[this.Parent.Nickname].Rider.ClubMark_LOGO == 0)
                             {
                                 outPacket.WriteInt(0);
                             }
@@ -1686,18 +1673,18 @@ namespace KartRider
                     {
                         using (OutPacket outPacket = new OutPacket("PrInitClubInfoPacket"))
                         {
-                            outPacket.WriteInt(ProfileService.ProfileConfigs[Nickname].Rider.ClubCode);
-                            outPacket.WriteString(ProfileService.ProfileConfigs[Nickname].Rider.ClubName);
+                            outPacket.WriteInt(ProfileService.ProfileConfigs[this.Parent.Nickname].Rider.ClubCode);
+                            outPacket.WriteString(ProfileService.ProfileConfigs[this.Parent.Nickname].Rider.ClubName);
                             outPacket.WriteDateTime(DateTime.Now);
                             outPacket.WriteByte(5);
                             outPacket.WriteByte(1);
-                            outPacket.WriteUInt(ClientManager.GetUserNO(Nickname));
-                            outPacket.WriteString(Nickname);
+                            outPacket.WriteUInt(ClientManager.GetUserNO(this.Parent.Nickname));
+                            outPacket.WriteString(this.Parent.Nickname);
                             outPacket.WriteInt(500);//最大成员数
                             outPacket.WriteHexString("00000000E803000004FFFF0000");
-                            outPacket.WriteString(ProfileService.ProfileConfigs[Nickname].Rider.ClubIntro);
-                            outPacket.WriteInt(ProfileService.ProfileConfigs[Nickname].Rider.ClubMark_LOGO);
-                            outPacket.WriteInt(ProfileService.ProfileConfigs[Nickname].Rider.ClubMark_LINE);
+                            outPacket.WriteString(ProfileService.ProfileConfigs[this.Parent.Nickname].Rider.ClubIntro);
+                            outPacket.WriteInt(ProfileService.ProfileConfigs[this.Parent.Nickname].Rider.ClubMark_LOGO);
+                            outPacket.WriteInt(ProfileService.ProfileConfigs[this.Parent.Nickname].Rider.ClubMark_LINE);
                             outPacket.WriteInt(3000000);//周活跃度
                             outPacket.WriteInt(3000000);//俱乐部活跃度
                             outPacket.WriteHexString("C0C62D0000000000");
@@ -1716,19 +1703,19 @@ namespace KartRider
                             outPacket.WriteInt(ClubCount);
                             for (int i = 0; i < ClubCount; i++)
                             {
-                                outPacket.WriteInt(ProfileService.ProfileConfigs[Nickname].Rider.ClubCode);
-                                outPacket.WriteString(ProfileService.ProfileConfigs[Nickname].Rider.ClubName);
+                                outPacket.WriteInt(ProfileService.ProfileConfigs[this.Parent.Nickname].Rider.ClubCode);
+                                outPacket.WriteString(ProfileService.ProfileConfigs[this.Parent.Nickname].Rider.ClubName);
                                 outPacket.WriteByte(5);
                                 outPacket.WriteInt(500);//最大成员数
                                 outPacket.WriteHexString("FFFFFFFF");
                                 outPacket.WriteInt(3000000);//活跃度
                                 outPacket.WriteInt(3000000);//最大活跃度
-                                outPacket.WriteInt(ProfileService.ProfileConfigs[Nickname].Rider.ClubMark_LOGO);
+                                outPacket.WriteInt(ProfileService.ProfileConfigs[this.Parent.Nickname].Rider.ClubMark_LOGO);
                                 outPacket.WriteInt(0);
-                                outPacket.WriteString(Nickname);
+                                outPacket.WriteString(this.Parent.Nickname);
                                 outPacket.WriteInt(500);//成员数
                                 outPacket.WriteDateTime(DateTime.Now);
-                                outPacket.WriteString(ProfileService.ProfileConfigs[Nickname].Rider.ClubIntro);
+                                outPacket.WriteString(ProfileService.ProfileConfigs[this.Parent.Nickname].Rider.ClubIntro);
                                 outPacket.WriteShort(0);
                                 outPacket.WriteInt(3000000);//周活跃度
                             }
@@ -1760,18 +1747,18 @@ namespace KartRider
                         int ClubMemberCount = 1;
                         using (OutPacket outPacket = new OutPacket("PrClubInitFirstPacket"))
                         {
-                            outPacket.WriteInt(ProfileService.ProfileConfigs[Nickname].Rider.ClubCode);
-                            outPacket.WriteString(ProfileService.ProfileConfigs[Nickname].Rider.ClubName);
+                            outPacket.WriteInt(ProfileService.ProfileConfigs[this.Parent.Nickname].Rider.ClubCode);
+                            outPacket.WriteString(ProfileService.ProfileConfigs[this.Parent.Nickname].Rider.ClubName);
                             outPacket.WriteDateTime(DateTime.Now);
                             outPacket.WriteByte(5);
                             outPacket.WriteByte(1);
-                            outPacket.WriteUInt(ClientManager.GetUserNO(Nickname));
-                            outPacket.WriteString(Nickname);
+                            outPacket.WriteUInt(ClientManager.GetUserNO(this.Parent.Nickname));
+                            outPacket.WriteString(this.Parent.Nickname);
                             outPacket.WriteInt(500);//最大成员数
                             outPacket.WriteHexString("00000000E803000004FFFF0000");
-                            outPacket.WriteString(ProfileService.ProfileConfigs[Nickname].Rider.ClubIntro);
-                            outPacket.WriteInt(ProfileService.ProfileConfigs[Nickname].Rider.ClubMark_LOGO);
-                            outPacket.WriteInt(ProfileService.ProfileConfigs[Nickname].Rider.ClubMark_LINE);
+                            outPacket.WriteString(ProfileService.ProfileConfigs[this.Parent.Nickname].Rider.ClubIntro);
+                            outPacket.WriteInt(ProfileService.ProfileConfigs[this.Parent.Nickname].Rider.ClubMark_LOGO);
+                            outPacket.WriteInt(ProfileService.ProfileConfigs[this.Parent.Nickname].Rider.ClubMark_LINE);
                             outPacket.WriteInt(3000000);//周活跃度
                             outPacket.WriteInt(3000000);//俱乐部活跃度
                             outPacket.WriteHexString("C0C62D0000000000");
@@ -1780,10 +1767,10 @@ namespace KartRider
                             outPacket.WriteInt(ClubMemberCount);
                             for (int i = 0; i < ClubMemberCount; i++)
                             {
-                                outPacket.WriteInt(ProfileService.ProfileConfigs[Nickname].Rider.ClubCode);
-                                outPacket.WriteUInt(ClientManager.GetUserNO(Nickname));
-                                outPacket.WriteString(Nickname);
-                                outPacket.WriteUInt(ProfileService.ProfileConfigs[Nickname].Rider.RP);
+                                outPacket.WriteInt(ProfileService.ProfileConfigs[this.Parent.Nickname].Rider.ClubCode);
+                                outPacket.WriteUInt(ClientManager.GetUserNO(this.Parent.Nickname));
+                                outPacket.WriteString(this.Parent.Nickname);
+                                outPacket.WriteUInt(ProfileService.ProfileConfigs[this.Parent.Nickname].Rider.RP);
                                 outPacket.WriteShort(5);//职位
                                 outPacket.WriteUInt(3000000);//周活跃度
                                 outPacket.WriteUInt(3000000);//累计活跃度
@@ -1793,10 +1780,10 @@ namespace KartRider
                                 outPacket.WriteDateTime(DateTime.Now);
                                 outPacket.WriteInt(0);
                             }
-                            outPacket.WriteInt(ProfileService.ProfileConfigs[Nickname].Rider.ClubCode);
-                            outPacket.WriteUInt(ClientManager.GetUserNO(Nickname));
-                            outPacket.WriteString(Nickname);
-                            outPacket.WriteUInt(ProfileService.ProfileConfigs[Nickname].Rider.RP);
+                            outPacket.WriteInt(ProfileService.ProfileConfigs[this.Parent.Nickname].Rider.ClubCode);
+                            outPacket.WriteUInt(ClientManager.GetUserNO(this.Parent.Nickname));
+                            outPacket.WriteString(this.Parent.Nickname);
+                            outPacket.WriteUInt(ProfileService.ProfileConfigs[this.Parent.Nickname].Rider.RP);
                             outPacket.WriteShort(5);//职位
                             outPacket.WriteUInt(3000000);//周活跃度
                             outPacket.WriteUInt(3000000);//累计活跃度
@@ -1824,9 +1811,9 @@ namespace KartRider
                             for (int i = 0; i < ClubMemberCount; i++)
                             {
                                 outPacket.WriteInt(ClubID);
-                                outPacket.WriteUInt(ClientManager.GetUserNO(Nickname));
-                                outPacket.WriteString(Nickname);
-                                outPacket.WriteUInt(ProfileService.ProfileConfigs[Nickname].Rider.RP);
+                                outPacket.WriteUInt(ClientManager.GetUserNO(this.Parent.Nickname));
+                                outPacket.WriteString(this.Parent.Nickname);
+                                outPacket.WriteUInt(ProfileService.ProfileConfigs[this.Parent.Nickname].Rider.RP);
                                 outPacket.WriteShort(5);//职位
                                 outPacket.WriteUInt(3000000);//周活跃度
                                 outPacket.WriteUInt(3000000);//累计活跃度
@@ -1838,9 +1825,9 @@ namespace KartRider
                             }
                             outPacket.WriteInt(300);
                             outPacket.WriteInt(ClubID);
-                            outPacket.WriteUInt(ClientManager.GetUserNO(Nickname));
-                            outPacket.WriteString(Nickname);
-                            outPacket.WriteUInt(ProfileService.ProfileConfigs[Nickname].Rider.RP);
+                            outPacket.WriteUInt(ClientManager.GetUserNO(this.Parent.Nickname));
+                            outPacket.WriteString(this.Parent.Nickname);
+                            outPacket.WriteUInt(ProfileService.ProfileConfigs[this.Parent.Nickname].Rider.RP);
                             outPacket.WriteShort(5);//职位
                             outPacket.WriteUInt(3000000);//周活跃度
                             outPacket.WriteUInt(3000000);//累计活跃度
@@ -1903,8 +1890,8 @@ namespace KartRider
                             outPacket.WriteInt(ClubID);
                             this.Parent.Client.Send(outPacket);
                         }
-                        ProfileService.ProfileConfigs[Nickname].Rider.ClubMark_LOGO = 0;
-                        ProfileService.Save(Nickname);
+                        ProfileService.ProfileConfigs[this.Parent.Nickname].Rider.ClubMark_LOGO = 0;
+                        ProfileService.Save(this.Parent.Nickname);
                         return;
                     }
                     else if (hash == Adler32Helper.GenerateAdler32_ASCII("PqChangeClubAutoJoinStatePacket", 0))
@@ -1922,14 +1909,14 @@ namespace KartRider
                     {
                         using (OutPacket outPacket = new OutPacket("PrInitClubHousePacket"))
                         {
-                            outPacket.WriteString(ProfileService.ProfileConfigs[Nickname].Rider.ClubName);
+                            outPacket.WriteString(ProfileService.ProfileConfigs[this.Parent.Nickname].Rider.ClubName);
                             outPacket.WriteByte(5);
                             outPacket.WriteByte(5);
                             outPacket.WriteInt(500);
                             outPacket.WriteInt(500);
                             outPacket.WriteInt(3000000);
                             outPacket.WriteInt(1000);
-                            outPacket.WriteInt(ProfileService.ProfileConfigs[Nickname].Rider.ClubMark_LOGO);
+                            outPacket.WriteInt(ProfileService.ProfileConfigs[this.Parent.Nickname].Rider.ClubMark_LOGO);
                             outPacket.WriteInt(0);
                             outPacket.WriteInt(0);
                             outPacket.WriteInt(0);
@@ -1979,7 +1966,7 @@ namespace KartRider
                             outPacket.WriteInt(0);
                             outPacket.WriteInt(0);
                             outPacket.WriteInt(0);
-                            outPacket.WriteUInt(ProfileService.ProfileConfigs[Nickname].Rider.Lucci);
+                            outPacket.WriteUInt(ProfileService.ProfileConfigs[this.Parent.Nickname].Rider.Lucci);
                             this.Parent.Client.Send(outPacket);
                         }
                         return;
@@ -2021,8 +2008,8 @@ namespace KartRider
                             outPacket.WriteString(newClubName);
                             outPacket.WriteInt(1000);
                             this.Parent.Client.Send(outPacket);
-                            ProfileService.ProfileConfigs[Nickname].Rider.ClubName = newClubName;
-                            ProfileService.Save(Nickname);
+                            ProfileService.ProfileConfigs[this.Parent.Nickname].Rider.ClubName = newClubName;
+                            ProfileService.Save(this.Parent.Nickname);
                         }
                         return;
                     }
@@ -2035,15 +2022,15 @@ namespace KartRider
                             outPacket.WriteInt(newClubMark);
                             outPacket.WriteInt(1000);
                             this.Parent.Client.Send(outPacket);
-                            ProfileService.ProfileConfigs[Nickname].Rider.ClubMark_LOGO = newClubMark;
-                            ProfileService.Save(Nickname);
+                            ProfileService.ProfileConfigs[this.Parent.Nickname].Rider.ClubMark_LOGO = newClubMark;
+                            ProfileService.Save(this.Parent.Nickname);
                         }
                         return;
                     }
                     else if (hash == Adler32Helper.GenerateAdler32_ASCII("PqChangeClubIntroPacket", 0))
                     {
-                        ProfileService.ProfileConfigs[Nickname].Rider.ClubIntro = iPacket.ReadString();
-                        ProfileService.Save(Nickname);
+                        ProfileService.ProfileConfigs[this.Parent.Nickname].Rider.ClubIntro = iPacket.ReadString();
+                        ProfileService.Save(this.Parent.Nickname);
                         using (OutPacket outPacket = new OutPacket("PrChangeClubIntroPacket"))
                         {
                             outPacket.WriteInt(0);
@@ -2107,7 +2094,7 @@ namespace KartRider
                     }
                     else if (hash == Adler32Helper.GenerateAdler32_ASCII("PqStartRiderSchool", 0))
                     {
-                        RiderSchool.PrStartRiderSchool(this.Parent, Nickname);
+                        RiderSchool.PrStartRiderSchool(this.Parent, this.Parent.Nickname);
                         return;
                     }
                     else if (hash == Adler32Helper.GenerateAdler32_ASCII("PqRiderSchoolExpiredCheck", 0))
@@ -2124,7 +2111,7 @@ namespace KartRider
                         using (OutPacket outPacket = new OutPacket("PrRankerInfoPacket"))
                         {
                             outPacket.WriteByte(0);
-                            outPacket.WriteByte(ProfileService.ProfileConfigs[Nickname].Rider.Ranker);
+                            outPacket.WriteByte(ProfileService.ProfileConfigs[this.Parent.Nickname].Rider.Ranker);
                             outPacket.WriteHexString("00 00 C8 42 00 00 00 00");
                             this.Parent.Client.Send(outPacket);
                         }
@@ -2172,7 +2159,7 @@ namespace KartRider
                     {
                         using (OutPacket outPacket = new OutPacket("SpRpKoinBalance"))
                         {
-                            outPacket.WriteUInt(ProfileService.ProfileConfigs[Nickname].Rider.Koin);
+                            outPacket.WriteUInt(ProfileService.ProfileConfigs[this.Parent.Nickname].Rider.Koin);
                             outPacket.WriteUInt(0);
                             this.Parent.Client.Send(outPacket);
                         }
@@ -2180,7 +2167,7 @@ namespace KartRider
                     }
                     else if (hash == Adler32Helper.GenerateAdler32_ASCII("PqFavoriteTrackMapGet", 0))
                     {
-                        FavoriteItem.Favorite_Track(this.Parent, Nickname);
+                        FavoriteItem.Favorite_Track(this.Parent, this.Parent.Nickname);
                         return;
                     }
                     else if (hash == Adler32Helper.GenerateAdler32_ASCII("PqGetFavoriteChannel", 0))
@@ -2218,7 +2205,7 @@ namespace KartRider
                         using (OutPacket outPacket = new OutPacket("SpRpRemainCashPacket"))
                         {
                             outPacket.WriteUInt(0);
-                            outPacket.WriteUInt(ProfileService.ProfileConfigs[Nickname].Rider.Cash);
+                            outPacket.WriteUInt(ProfileService.ProfileConfigs[this.Parent.Nickname].Rider.Cash);
                             this.Parent.Client.Send(outPacket);
                         }
                         return;
@@ -2228,7 +2215,7 @@ namespace KartRider
                         using (OutPacket outPacket = new OutPacket("SpRpRemainTcCashPacket"))
                         {
                             outPacket.WriteUInt(99);
-                            outPacket.WriteUInt(ProfileService.ProfileConfigs[Nickname].Rider.TcCash);
+                            outPacket.WriteUInt(ProfileService.ProfileConfigs[this.Parent.Nickname].Rider.TcCash);
                             this.Parent.Client.Send(outPacket);
                         }
                         return;
@@ -2242,9 +2229,9 @@ namespace KartRider
                         {
                             outPacket.WriteInt(0);
                             outPacket.WriteInt(0);
-                            outPacket.WriteUInt(ProfileService.ProfileConfigs[Nickname].Rider.Lucci);
+                            outPacket.WriteUInt(ProfileService.ProfileConfigs[this.Parent.Nickname].Rider.Lucci);
                             outPacket.WriteHexString("00 00 00 00");
-                            outPacket.WriteUInt(ProfileService.ProfileConfigs[Nickname].Rider.Koin);
+                            outPacket.WriteUInt(ProfileService.ProfileConfigs[this.Parent.Nickname].Rider.Koin);
                             outPacket.WriteHexString("00 00 00 00 00 00 00 00 00 00 00 00 00");
                             this.Parent.Client.Send(outPacket);
                         }
@@ -2350,7 +2337,7 @@ namespace KartRider
                     else if (hash == Adler32Helper.GenerateAdler32_ASCII("PqGetCompetitiveSlotInfo", 0))
                     {
                         var manager = new CompetitiveDataManager();
-                        var competitiveData = manager.LoadAllData(Nickname);
+                        var competitiveData = manager.LoadAllData(this.Parent.Nickname);
                         using (OutPacket outPacket = new OutPacket("PrGetCompetitiveSlotInfo"))
                         {
                             outPacket.WriteInt(competitiveData.Count);
@@ -2413,15 +2400,15 @@ namespace KartRider
                     }
                     else if (hash == Adler32Helper.GenerateAdler32_ASCII("RmRqUpdateMainEmblemPacket", 0))
                     {
-                        ProfileService.ProfileConfigs[Nickname].Rider.Emblem1 = iPacket.ReadShort();
-                        ProfileService.ProfileConfigs[Nickname].Rider.Emblem2 = iPacket.ReadShort();
+                        ProfileService.ProfileConfigs[this.Parent.Nickname].Rider.Emblem1 = iPacket.ReadShort();
+                        ProfileService.ProfileConfigs[this.Parent.Nickname].Rider.Emblem2 = iPacket.ReadShort();
                         using (OutPacket outPacket = new OutPacket("RmRpUpdateMainEmblemPacket"))
                         {
                             outPacket.WriteByte(1);
                             outPacket.WriteByte(0);
                             this.Parent.Client.Send(outPacket);
                         }
-                        ProfileService.Save(Nickname);
+                        ProfileService.Save(this.Parent.Nickname);
                         return;
                     }
                     else if (hash == Adler32Helper.GenerateAdler32_ASCII("PqSyncDictionaryInfoPacket", 0))
@@ -2480,7 +2467,7 @@ namespace KartRider
                         }
                         if (ItemType == 3)
                         {
-                            NewRider.DelNewKart(Nickname, ItemID, SN);
+                            NewRider.DelNewKart(this.Parent.Nickname, ItemID, SN);
                         }
                         return;
                     }
@@ -2605,7 +2592,7 @@ namespace KartRider
                     }
                     else if (hash == Adler32Helper.GenerateAdler32_ASCII("PqFavoriteItemGet", 0)) //즐겨 찾기 목록
                     {
-                        FavoriteItem.Favorite_Item(this.Parent, Nickname);
+                        FavoriteItem.Favorite_Item(this.Parent, this.Parent.Nickname);
                         return;
                     }
                     else if (hash == Adler32Helper.GenerateAdler32_ASCII("PqFavoriteItemUpdate", 0))
@@ -2620,18 +2607,18 @@ namespace KartRider
                             byte Add_Del = iPacket.ReadByte();
                             if (Add_Del == 1)
                             {
-                                FavoriteItem.Favorite_Item_Add(Nickname, item, id, sn);
+                                FavoriteItem.Favorite_Item_Add(this.Parent.Nickname, item, id, sn);
                             }
                             else if (Add_Del == 2)
                             {
-                                FavoriteItem.Favorite_Item_Del(Nickname, item, id, sn);
+                                FavoriteItem.Favorite_Item_Del(this.Parent.Nickname, item, id, sn);
                             }
                         }
                         return;
                     }
                     else if (hash == Adler32Helper.GenerateAdler32_ASCII("PqLockedItemGet", 0))//아이템 보호
                     {
-                        LockedItem.LockedItemGet(this.Parent, Nickname);
+                        LockedItem.LockedItemGet(this.Parent, this.Parent.Nickname);
                         return;
                     }
                     else if (hash == Adler32Helper.GenerateAdler32_ASCII("PqLockedItemUpdate", 0))
@@ -2646,11 +2633,11 @@ namespace KartRider
                             byte Add_Del = iPacket.ReadByte();
                             if (Add_Del == 1)
                             {
-                                LockedItem.LockedItem_Add(Nickname, item, id, sn);
+                                LockedItem.LockedItem_Add(this.Parent.Nickname, item, id, sn);
                             }
                             else if (Add_Del == 2)
                             {
-                                LockedItem.LockedItem_Del(Nickname, item, id, sn);
+                                LockedItem.LockedItem_Del(this.Parent.Nickname, item, id, sn);
                             }
                         }
                         return;
@@ -2688,7 +2675,7 @@ namespace KartRider
                         using (OutPacket outPacket = new OutPacket("PrExchangeXPartsItem"))
                         {
                             outPacket.WriteInt(0);
-                            outPacket.WriteInt(ProfileService.ProfileConfigs[Nickname].Rider.SlotChanger);
+                            outPacket.WriteInt(ProfileService.ProfileConfigs[this.Parent.Nickname].Rider.SlotChanger);
                             outPacket.WriteShort(randomNumber);
                             outPacket.WriteShort(KartType);
                             outPacket.WriteShort(1);
@@ -2809,7 +2796,7 @@ namespace KartRider
                     }
                     else if (hash == Adler32Helper.GenerateAdler32_ASCII("PqLogin", 0))
                     {
-                        GameDataReset.DataReset(Nickname);
+                        GameDataReset.DataReset(this.Parent.Nickname);
 
                         bool PcMsgPassport = false;
 
@@ -2817,22 +2804,22 @@ namespace KartRider
                         {
                             outPacket.WriteInt(0);
                             outPacket.WriteDateTime(DateTime.Now);
-                            outPacket.WriteUInt(ClientManager.GetUserNO(Nickname));
-                            outPacket.WriteString(Nickname); // UserID
+                            outPacket.WriteUInt(ClientManager.GetUserNO(this.Parent.Nickname));
+                            outPacket.WriteString(this.Parent.Nickname); // UserID
                             outPacket.WriteByte(2);
                             outPacket.WriteByte(1);
                             outPacket.WriteByte(0);
                             outPacket.WriteInt(0);
                             outPacket.WriteByte(0);
                             outPacket.WriteHexString("FF FF 5F 54");
-                            outPacket.WriteUInt(ProfileService.ProfileConfigs[Nickname].Rider.pmap);
+                            outPacket.WriteUInt(ProfileService.ProfileConfigs[this.Parent.Nickname].Rider.pmap);
                             for (int i = 0; i < 11; i++)
                             {
                                 outPacket.WriteInt(0);
                             }
                             outPacket.WriteByte(0);
-                            outPacket.WriteEndPoint(new IPEndPoint(IPAddress.Any, ProfileService.SettingConfig.ServerPort));
-                            outPacket.WriteEndPoint(new IPEndPoint(IPAddress.Any, (ushort)(ProfileService.SettingConfig.ServerPort + 1)));
+                            outPacket.WriteEndPoint(IPAddress.Any, ProfileService.SettingConfig.ServerPort);
+                            outPacket.WriteEndPoint(IPAddress.Any, (ushort)(ProfileService.SettingConfig.ServerPort + 1));
                             outPacket.WriteByte(0);
                             outPacket.WriteByte(0);
                             outPacket.WriteByte((byte)(PcMsgPassport ? 1 : 0));
@@ -2915,15 +2902,15 @@ namespace KartRider
                             outPacket.WriteString("250");
                             outPacket.WriteInt(0);
                             outPacket.WriteByte(0);
-                            outPacket.WriteByte(ProfileService.ProfileConfigs[Nickname].GameOption.Set_screen);
-                            outPacket.WriteByte(ProfileService.ProfileConfigs[Nickname].Rider.IdentificationType);
+                            outPacket.WriteByte(ProfileService.ProfileConfigs[this.Parent.Nickname].GameOption.Set_screen);
+                            outPacket.WriteByte(ProfileService.ProfileConfigs[this.Parent.Nickname].Rider.IdentificationType);
                             this.Parent.Client.Send(outPacket);
                         }
                         if (PcMsgPassport)
                         {
                             using (OutPacket outPacket = new OutPacket("PcMsgPassport"))
                             {
-                                outPacket.WriteString(Nickname);
+                                outPacket.WriteString(this.Parent.Nickname);
                                 outPacket.WriteString("2000142541");
                                 outPacket.WriteString("meemllpigrppochjepdmgclfekpocdikifemgnkddeierhkekiefcidhrreienedmrcemjcjpqmjpkolfjfpggiqiefelqleondcpennpmpfenhpfomdpfqdpdpggdjm", true);
                                 this.Parent.Client.Send(outPacket);
@@ -3039,8 +3026,8 @@ namespace KartRider
                     }
                     else if (hash == Adler32Helper.GenerateAdler32_ASCII("SpRqUseInitialCardPacket", 0))
                     {
-                        ProfileService.ProfileConfigs[Nickname].Rider.Card = iPacket.ReadString();
-                        ProfileService.Save(Nickname);
+                        ProfileService.ProfileConfigs[this.Parent.Nickname].Rider.Card = iPacket.ReadString();
+                        ProfileService.Save(this.Parent.Nickname);
                         using (OutPacket outPacket = new OutPacket("SpRpUseInitialCardPacket"))
                         {
                             outPacket.WriteInt(0);
@@ -3053,11 +3040,11 @@ namespace KartRider
                         short kart = iPacket.ReadShort();
                         short sn = iPacket.ReadShort();
                         uint[] money = new uint[] { 0, 10, 12, 15, 20, 30 };
-                        if (!FileName.FileNames.ContainsKey(Nickname))
+                        if (!FileName.FileNames.ContainsKey(this.Parent.Nickname))
                         {
-                            FileName.Load(Nickname);
+                            FileName.Load(this.Parent.Nickname);
                         }
-                        var filename = FileName.FileNames[Nickname];
+                        var filename = FileName.FileNames[this.Parent.Nickname];
                         var Level12List = new List<Level12>();
                         if (File.Exists(filename.Level12Data_LoadFile))
                         {
@@ -3086,9 +3073,9 @@ namespace KartRider
                                 outPacket.WriteInt(0);
                                 outPacket.WriteInt(0);
                                 outPacket.WriteUInt(money[(int)Level]);
-                                outPacket.WriteUInt(ProfileService.ProfileConfigs[Nickname].Rider.Lucci);
+                                outPacket.WriteUInt(ProfileService.ProfileConfigs[this.Parent.Nickname].Rider.Lucci);
                                 this.Parent.Client.Send(outPacket);
-                                KartExcData.AddLevel12List(Nickname, kart, sn, Level, -1, -1, -1, Point);
+                                KartExcData.AddLevel12List(this.Parent.Nickname, kart, sn, Level, -1, -1, -1, Point);
                             }
                         }
                         else
@@ -3109,9 +3096,9 @@ namespace KartRider
                                 outPacket.WriteInt(0);
                                 outPacket.WriteInt(0);
                                 outPacket.WriteUInt(10);
-                                outPacket.WriteUInt(ProfileService.ProfileConfigs[Nickname].Rider.Lucci);
+                                outPacket.WriteUInt(ProfileService.ProfileConfigs[this.Parent.Nickname].Rider.Lucci);
                                 this.Parent.Client.Send(outPacket);
-                                KartExcData.AddLevel12List(Nickname, kart, sn, 5, 0, 0, 0, 15);
+                                KartExcData.AddLevel12List(this.Parent.Nickname, kart, sn, 5, 0, 0, 0, 15);
                             }
                         }
                         return;
@@ -3148,11 +3135,11 @@ namespace KartRider
                         short kart = iPacket.ReadShort();
                         short sn = iPacket.ReadShort();
                         short field = iPacket.ReadShort();
-                        if (!FileName.FileNames.ContainsKey(Nickname))
+                        if (!FileName.FileNames.ContainsKey(this.Parent.Nickname))
                         {
-                            FileName.Load(Nickname);
+                            FileName.Load(this.Parent.Nickname);
                         }
-                        var filename = FileName.FileNames[Nickname];
+                        var filename = FileName.FileNames[this.Parent.Nickname];
                         var Level12List = new List<Level12>();
                         if (File.Exists(filename.Level12Data_LoadFile))
                         {
@@ -3188,7 +3175,7 @@ namespace KartRider
                                     skilllevel = existingParts.SkillGrade3;
                                     break;
                             }
-                            KartExcData.AddLevel12List(Nickname, kart, sn, -1, field, skill, 0, (short)(point + skilllevel));
+                            KartExcData.AddLevel12List(this.Parent.Nickname, kart, sn, -1, field, skill, 0, (short)(point + skilllevel));
                         }
                         return;
                     }
@@ -3207,7 +3194,7 @@ namespace KartRider
                             outPacket.WriteShort(0);
                             this.Parent.Client.Send(outPacket);
                         }
-                        KartExcData.AddLevel12List(Nickname, kart, sn, -1, field, Skill, -1, -1);
+                        KartExcData.AddLevel12List(this.Parent.Nickname, kart, sn, -1, field, Skill, -1, -1);
                         return;
                     }
                     else if (hash == Adler32Helper.GenerateAdler32_ASCII("PqKart12TuningPointUpdate", 0))
@@ -3216,11 +3203,11 @@ namespace KartRider
                         short sn = iPacket.ReadShort();
                         short field = iPacket.ReadShort();
                         byte AddDel = iPacket.ReadByte();
-                        if (!FileName.FileNames.ContainsKey(Nickname))
+                        if (!FileName.FileNames.ContainsKey(this.Parent.Nickname))
                         {
-                            FileName.Load(Nickname);
+                            FileName.Load(this.Parent.Nickname);
                         }
-                        var filename = FileName.FileNames[Nickname];
+                        var filename = FileName.FileNames[this.Parent.Nickname];
                         var Level12List = new List<Level12>();
                         if (File.Exists(filename.Level12Data_LoadFile))
                         {
@@ -3256,7 +3243,7 @@ namespace KartRider
                                     outPacket.WriteByte(1);
                                     this.Parent.Client.Send(outPacket);
                                 }
-                                KartExcData.AddLevel12List(Nickname, kart, sn, -1, field, -1, (short)((int)skilllevel + 1), (short)((int)point - 1));
+                                KartExcData.AddLevel12List(this.Parent.Nickname, kart, sn, -1, field, -1, (short)((int)skilllevel + 1), (short)((int)point - 1));
                             }
                             else if (AddDel == 0)
                             {
@@ -3271,7 +3258,7 @@ namespace KartRider
                                     outPacket.WriteByte(0);
                                     this.Parent.Client.Send(outPacket);
                                 }
-                                KartExcData.AddLevel12List(Nickname, kart, sn, -1, field, -1, (short)((int)skilllevel - 1), (short)((int)point + 1));
+                                KartExcData.AddLevel12List(this.Parent.Nickname, kart, sn, -1, field, -1, (short)((int)skilllevel - 1), (short)((int)point + 1));
                             }
                         }
                         return;
@@ -3288,7 +3275,7 @@ namespace KartRider
                         using (OutPacket outPacket = new OutPacket("PrKart12PartsLevelUp"))
                         {
                             outPacket.WriteInt(1);
-                            outPacket.WriteUInt(ProfileService.ProfileConfigs[Nickname].Rider.Lucci);
+                            outPacket.WriteUInt(ProfileService.ProfileConfigs[this.Parent.Nickname].Rider.Lucci);
                             outPacket.WriteShort(0);
                             outPacket.WriteShort(0);
                             this.Parent.Client.Send(outPacket);
@@ -3311,7 +3298,7 @@ namespace KartRider
                         }
                         if (kart != 0 && sn != 0 && Item_Cat_Id != 0)
                         {
-                            KartExcData.AddPartsList(Nickname, kart, sn, Item_Cat_Id, (short)(old + 1), V2Specs.GetGrade((byte)(old + 1)), V2Specs.Get12Parts((short)(old + 1)));
+                            KartExcData.AddPartsList(this.Parent.Nickname, kart, sn, Item_Cat_Id, (short)(old + 1), V2Specs.GetGrade((byte)(old + 1)), V2Specs.Get12Parts((short)(old + 1)));
                         }
                         return;
                     }
@@ -3324,7 +3311,7 @@ namespace KartRider
                         using (OutPacket outPacket = new OutPacket("PrKart12PartsLevelReset"))
                         {
                             outPacket.WriteInt(1);
-                            outPacket.WriteUInt(ProfileService.ProfileConfigs[Nickname].Rider.Lucci);
+                            outPacket.WriteUInt(ProfileService.ProfileConfigs[this.Parent.Nickname].Rider.Lucci);
                             outPacket.WriteShort(0);
                             outPacket.WriteShort(0);
                             this.Parent.Client.Send(outPacket);
@@ -3347,7 +3334,7 @@ namespace KartRider
                         }
                         if (kart != 0 && sn != 0 && Item_Cat_Id != 0)
                         {
-                            KartExcData.AddPartsList(Nickname, kart, sn, Item_Cat_Id, 1, 4, 201);
+                            KartExcData.AddPartsList(this.Parent.Nickname, kart, sn, Item_Cat_Id, 1, 4, 201);
                         }
                         return;
                     }
@@ -3361,11 +3348,11 @@ namespace KartRider
                         uint Lucci = iPacket.ReadUInt();
 
                         int ExceedType1 = 0;
-                        if (!FileName.FileNames.ContainsKey(Nickname))
+                        if (!FileName.FileNames.ContainsKey(this.Parent.Nickname))
                         {
-                            FileName.Load(Nickname);
+                            FileName.Load(this.Parent.Nickname);
                         }
-                        var filename = FileName.FileNames[Nickname];
+                        var filename = FileName.FileNames[this.Parent.Nickname];
                         var Parts12List = new List<Parts12>();
                         if (File.Exists(filename.Level12Data_LoadFile))
                         {
@@ -3390,11 +3377,11 @@ namespace KartRider
                             outPacket.WriteShort(0);//kart2
                             outPacket.WriteShort(0);//sn2
                             outPacket.WriteShort(Spanner);
-                            outPacket.WriteUInt(ProfileService.ProfileConfigs[Nickname].Rider.Lucci);
+                            outPacket.WriteUInt(ProfileService.ProfileConfigs[this.Parent.Nickname].Rider.Lucci);
                             outPacket.WriteInt(ExceedType2);
                             this.Parent.Client.Send(outPacket);
                         }
-                        KartExcData.AddPartsList(Nickname, kart1, sn1, 0, (short)ExceedType2, 0, 0);
+                        KartExcData.AddPartsList(this.Parent.Nickname, kart1, sn1, 0, (short)ExceedType2, 0, 0);
                         Console.WriteLine("ExceedType: " + ExceedType2);
                         return;
                     }
@@ -3523,11 +3510,11 @@ namespace KartRider
                     }
                     else if (hash == Adler32Helper.GenerateAdler32_ASCII("PqItemPresetSlotDataList", 0))
                     {
-                        ItemPresetsService.Load(Nickname);
+                        ItemPresetsService.Load(this.Parent.Nickname);
                         using (OutPacket outPacket = new OutPacket("PrItemPresetSlotDataList"))
                         {
-                            outPacket.WriteInt(ItemPresetsService.ItemPresetConfigs[Nickname].ItemPresets.Count);
-                            foreach (var ItemPreset in ItemPresetsService.ItemPresetConfigs[Nickname].ItemPresets)
+                            outPacket.WriteInt(ItemPresetsService.ItemPresetConfigs[this.Parent.Nickname].ItemPresets.Count);
+                            foreach (var ItemPreset in ItemPresetsService.ItemPresetConfigs[this.Parent.Nickname].ItemPresets)
                             {
                                 outPacket.WriteUShort(ItemPreset.ID);
                                 outPacket.WriteUShort(ItemPreset.ID);
@@ -3597,7 +3584,7 @@ namespace KartRider
                         iPacket.ReadInt();
                         short id1 = iPacket.ReadShort();
                         short id2 = iPacket.ReadShort();
-                        var ItemPreset = ItemPresetsService.ItemPresetConfigs[Nickname].ItemPresets.FirstOrDefault(ItemPreset => ItemPreset.ID == id1 && ItemPreset.ID == id2);
+                        var ItemPreset = ItemPresetsService.ItemPresetConfigs[this.Parent.Nickname].ItemPresets.FirstOrDefault(ItemPreset => ItemPreset.ID == id1 && ItemPreset.ID == id2);
                         if (ItemPreset != null)
                         {
                             ItemPreset.Badge = iPacket.ReadByte();
@@ -3642,7 +3629,7 @@ namespace KartRider
                             ItemPreset.KartTailLamp12 = iPacket.ReadUShort();
                             ItemPreset.KartBoosterEffect12 = iPacket.ReadUShort();
                             ItemPreset.Unknown5 = iPacket.ReadUShort();
-                            ItemPresetsService.Save(Nickname);
+                            ItemPresetsService.Save(this.Parent.Nickname);
                         }
                         return;
                     }
@@ -3654,7 +3641,7 @@ namespace KartRider
                             outPacket.WriteInt(1);
                             this.Parent.Client.Send(outPacket);
                         }
-                        foreach (var ItemPreset in ItemPresetsService.ItemPresetConfigs[Nickname].ItemPresets)
+                        foreach (var ItemPreset in ItemPresetsService.ItemPresetConfigs[this.Parent.Nickname].ItemPresets)
                         {
                             if (ItemPreset.ID == id)
                             {
@@ -3665,7 +3652,7 @@ namespace KartRider
                                 ItemPreset.Enable = 0;
                             }
                         }
-                        ItemPresetsService.Save(Nickname);
+                        ItemPresetsService.Save(this.Parent.Nickname);
                         return;
                     }
                     else if (hash == Adler32Helper.GenerateAdler32_ASCII("PqWhereIsRider", 0))
@@ -3786,7 +3773,7 @@ namespace KartRider
                     }
                     else if (hash == Adler32Helper.GenerateAdler32_ASCII("PcGameRequestRelay", 0))
                     {
-                        int roomId = RoomManager.TryGetRoomId(Nickname);
+                        int roomId = RoomManager.TryGetRoomId(this.Parent.Nickname);
                         var room = RoomManager.GetRoom(roomId);
                         if (room == null)
                         {
@@ -3814,15 +3801,17 @@ namespace KartRider
                     else if (hash == Adler32Helper.GenerateAdler32_ASCII("ChClientP2pAddrPacket", 0))
                     {
                         var ClientP2pAddr = iPacket.ReadEndPoint();
-                        Console.WriteLine($"[{Nickname}] {ClientP2pAddr.Address}:{ClientP2pAddr.Port}");
-                        ClientManager.ClientP2pAddrs[Nickname] = new IPEndPoint(clientEndPoint.Address, ClientP2pAddr.Port);
+                        ProfileService.ProfileConfigs[this.Parent.Nickname].Rider.P2pPort = (ushort)ClientP2pAddr.Port;
+                        ProfileService.Save(this.Parent.Nickname);
+                        Console.WriteLine($"[{this.Parent.Nickname}] {ClientP2pAddr.Address}:{ClientP2pAddr.Port}");
                         return;
                     }
                     else if (hash == Adler32Helper.GenerateAdler32_ASCII("ChClientUdpAddrPacket", 0))
                     {
                         var ClientUdpAddr = iPacket.ReadEndPoint();
-                        Console.WriteLine($"[{Nickname}] {ClientUdpAddr.Address}:{ClientUdpAddr.Port}");
-                        ClientManager.ClientUdpAddrs[Nickname] = new IPEndPoint(clientEndPoint.Address, ClientUdpAddr.Port);
+                        ProfileService.ProfileConfigs[this.Parent.Nickname].Rider.UdpPort = (ushort)ClientUdpAddr.Port;
+                        ProfileService.Save(this.Parent.Nickname);
+                        Console.WriteLine($"[{this.Parent.Nickname}] {ClientUdpAddr.Address}:{ClientUdpAddr.Port}");
                         return;
                     }
                     else if (hash == Adler32Helper.GenerateAdler32_ASCII("PqStartTrainingCenter", 0))
@@ -3830,13 +3819,9 @@ namespace KartRider
                         using (OutPacket outPacket = new OutPacket("PrStartTrainingCenter"))
                         {
                             outPacket.WriteByte(1);
-                            StartGameData.GetSchoolSpac(outPacket, Nickname);
+                            StartGameData.GetSchoolSpac(outPacket, this.Parent.Nickname);
                             this.Parent.Client.Send(outPacket);
                         }
-                        return;
-                    }
-                    else if (hash == Adler32Helper.GenerateAdler32_ASCII("PqServerSideUdpBindCheck", 0))
-                    {
                         return;
                     }
                     else if (hash == Adler32Helper.GenerateAdler32_ASCII("PqMIssionAttendGetCurUserInfoPacket", 0))
@@ -3861,7 +3846,7 @@ namespace KartRider
                     }
                     else
                     {
-                        MultyPlayer.Clientsession(this.Parent, Nickname, hash, iPacket);
+                        MultyPlayer.Clientsession(this.Parent, hash, iPacket);
                         return;
                     }
                 }

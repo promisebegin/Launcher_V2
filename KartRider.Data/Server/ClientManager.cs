@@ -25,8 +25,6 @@ public static class ClientManager
     // 线程安全的集合，存储所有客户端会话（键：客户端唯一标识，值：会话对象）
     public static readonly ConcurrentDictionary<string, SessionGroup> _clientSessions = new ConcurrentDictionary<string, SessionGroup>();
     public static ConcurrentDictionary<string, ClientGroup> ClientGroups = new ConcurrentDictionary<string, ClientGroup>();
-    public static ConcurrentDictionary<string, IPEndPoint> ClientUdpAddrs = new ConcurrentDictionary<string, IPEndPoint>();
-    public static ConcurrentDictionary<string, IPEndPoint> ClientP2pAddrs = new ConcurrentDictionary<string, IPEndPoint>();
     public static ConcurrentDictionary<string, uint> NicknameToUserNO = new ConcurrentDictionary<string, uint>();
     public static ConcurrentDictionary<uint, string> UserNOToNickname = new ConcurrentDictionary<uint, string>();
     private static uint UserNO = 1;
@@ -67,7 +65,6 @@ public static class ClientManager
                 RoomManager.RemovePlayer(roomId, (byte)slotId);
             }
             ClientGroups.TryRemove(clientId, out _);
-            ClientGroup.Nickname = "";
             Console.WriteLine($"客户端 {clientId} 已断开，当前在线数：{_clientSessions.Count}");
         }
     }
@@ -158,5 +155,14 @@ public static class ClientManager
         UserNOToNickname.TryAdd(newUserNO, Nickname);
 
         return newUserNO;
+    }
+
+    public static string GetNickname(uint UserNO)
+    {
+        if (UserNOToNickname.TryGetValue(UserNO, out string nickname))
+        {
+            return nickname;
+        }
+        return null;
     }
 }

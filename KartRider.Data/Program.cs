@@ -98,6 +98,9 @@ namespace KartRider
 
                 string TCGame = "HKEY_CURRENT_USER\\Software\\TCGame\\kart";
                 string RootDirectory = (string)Registry.GetValue(TCGame, "gamepath", null);
+                string KartRider = Path.GetFullPath(Path.Combine(RootDirectory, @"KartRider.exe"));
+                string pinFile = Path.GetFullPath(Path.Combine(RootDirectory, @"KartRider.pin"));
+                string pinFileBak = Path.GetFullPath(Path.Combine(RootDirectory, @"KartRider-bak.pin"));
                 if (File.Exists(FileName.pinFile) && File.Exists(FileName.KartRider))
                 {
                     RootDirectory = FileName.appDir;
@@ -113,58 +116,63 @@ namespace KartRider
                 }
                 if (!string.IsNullOrEmpty(RootDirectory))
                 {
+                    if (File.Exists(pinFileBak))
+                    {
+                        File.Delete(pinFile);
+                        File.Move(pinFileBak, pinFile);
+                    }
                     ProfileService.LoadSettings();
                     if (ProfileService.SettingConfig.PatchUpdate)
                     {
                         await PatchUpdate.UpdateDataAsync(RootDirectory);
                     }
 
-                    try
+                    Console.WriteLine("当前游戏路径: " + RootDirectory);
+                    Console.WriteLine("开始读取游戏Data内文件...");
+                    Console.WriteLine("==============================");
+                    var packFolderManager = KartRhoFile.Dump(Path.GetFullPath(Path.Combine(RootDirectory, @"Data\aaa.pk")));
+                    if (packFolderManager == null)
                     {
-                        Console.WriteLine("当前游戏路径: " + RootDirectory);
-                        Console.WriteLine("开始读取游戏Data内文件...");
-                        Console.WriteLine("==============================");
-                        var packFolderManager = KartRhoFile.Dump(Path.GetFullPath(Path.Combine(RootDirectory, @"Data\aaa.pk")));
-                        if (packFolderManager == null)
-                        {
-                            LauncherSystem.MessageBoxType4();
-                            return;
-                        }
-                        packFolderManager.Reset();
+                        // 弹出“是否”确认框
+                        DialogResult result = MessageBox.Show(
+                            $"读取游戏文件失败，是否需要更新或校验游戏？",
+                            "确认操作",
+                            MessageBoxButtons.YesNo,
+                            MessageBoxIcon.Question
+                        );
 
-                        if (!File.Exists(FileName.Load_Console))
+                        // 根据用户选择执行对应逻辑
+                        if (result == DialogResult.Yes)
                         {
-                            using (StreamWriter streamWriter = new StreamWriter(FileName.Load_Console, false))
-                            {
-                                streamWriter.Write("0");
-                            }
+                            LauncherSystem.CheckGame(RootDirectory);
                         }
-                        string textValue = System.IO.File.ReadAllText(FileName.Load_Console);
-                        if (textValue == "0")
-                        {
-                            ShowWindow(consoleHandle, SW_HIDE);
-                            isVisible = false;
-                        }
-
-                        Application.EnableVisualStyles();
-                        Application.SetCompatibleTextRenderingDefault(false);
-                        Launcher StartLauncher = new Launcher();
-                        Program.LauncherDlg = StartLauncher;
-                        Program.LauncherDlg.kartRiderDirectory = RootDirectory;
-                        Launcher.KartRider = Path.GetFullPath(Path.Combine(RootDirectory, @"KartRider.exe"));
-                        Launcher.pinFile = Path.GetFullPath(Path.Combine(RootDirectory, @"KartRider.pin"));
-                        Launcher.pinFileBak = Path.GetFullPath(Path.Combine(RootDirectory, @"KartRider-bak.pin"));
-                        if (File.Exists(Launcher.pinFileBak))
-                        {
-                            File.Delete(Launcher.pinFile);
-                            File.Move(Launcher.pinFileBak, Launcher.pinFile);
-                        }
-                        Application.Run(StartLauncher);
+                        return;
                     }
-                    catch (Exception ex)
+                    packFolderManager.Reset();
+
+                    if (!File.Exists(FileName.Load_Console))
                     {
-                        Console.WriteLine($"读取Data文件时出错: {ex.Message}");
+                        using (StreamWriter streamWriter = new StreamWriter(FileName.Load_Console, false))
+                        {
+                            streamWriter.Write("0");
+                        }
                     }
+                    string textValue = System.IO.File.ReadAllText(FileName.Load_Console);
+                    if (textValue == "0")
+                    {
+                        ShowWindow(consoleHandle, SW_HIDE);
+                        isVisible = false;
+                    }
+
+                    Application.EnableVisualStyles();
+                    Application.SetCompatibleTextRenderingDefault(false);
+                    Launcher StartLauncher = new Launcher();
+                    Program.LauncherDlg = StartLauncher;
+                    Program.LauncherDlg.kartRiderDirectory = RootDirectory;
+                    Launcher.KartRider = KartRider;
+                    Launcher.pinFile = pinFile;
+                    Launcher.pinFileBak = pinFileBak;
+                    Application.Run(StartLauncher);
                 }
             }
         }

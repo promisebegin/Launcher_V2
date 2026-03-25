@@ -172,57 +172,31 @@ namespace KartRider
 
         private void label_Client_Click(object sender, EventArgs e)
         {
-            byte[] data = RouterListener.Connect();
-            string filePath = JsonHelper.GetFilePath();
-
-            if (data != null)
+            GameVersion version = LauncherSystem.GetGameVersion();
+            if (version == null)
             {
-                InPacket iPacket = new InPacket(data);
-                iPacket.ReadUInt();
-                iPacket.ReadUInt();
-                iPacket.ReadUShort();
-                iPacket.ReadUShort();
-                ushort version = iPacket.ReadUShort();
-                string updateUrl = iPacket.ReadString();
+                MessageBox.Show("获取游戏版本失败！", "错误", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return;
+            }
 
-                // 弹出“是否”确认框
-                DialogResult result = MessageBox.Show(
-                    $"当前版本为：P{ClientVersion.Text}\n最新版本为：P{version}\n是否需要更新？",  // 提示文本
-                    "确认操作",                                      // 弹窗标题
-                    MessageBoxButtons.YesNo,                         // 按钮类型：是 + 否
-                    MessageBoxIcon.Question                          // 图标类型：问号（增强提示性）
-                );
+            // 弹出“是否”确认框
+            DialogResult result = MessageBox.Show(
+                $"当前版本为：P{ClientVersion.Text}\n最新版本为：P{version.Version}\n是否需要更新？",
+                "确认操作",
+                MessageBoxButtons.YesNo,
+                MessageBoxIcon.Question
+            );
 
-                // 根据用户选择执行对应逻辑
-                if (result == DialogResult.Yes)
+            // 根据用户选择执行对应逻辑
+            if (result == DialogResult.Yes)
+            {
+                if (File.Exists(pinFileBak))
                 {
-                    if (File.Exists(pinFileBak))
-                    {
-                        File.Delete(pinFile);
-                        File.Move(pinFileBak, pinFile);
-                    }
-
-                    System.Diagnostics.Process[] process = System.Diagnostics.Process.GetProcessesByName("KartRider");
-                    foreach (System.Diagnostics.Process p in process)
-                    {
-                        p.Kill();
-                    }
-                    try
-                    {
-                        ProcessStartInfo startInfo = new ProcessStartInfo("Patcher.exe", $"'1' '123' '{updateUrl}/{version}' '{kartRiderDirectory}' '{filePath}'")
-                        {
-                            WorkingDirectory = Path.GetFullPath(kartRiderDirectory),
-                            UseShellExecute = true,
-                            Verb = "runas" // 请求管理员权限（内存修改可能需要）
-                        };
-                        Process.Start(startInfo);
-                        Environment.Exit(0);
-                    }
-                    catch (Exception ex)
-                    {
-                        Console.WriteLine($"操作失败：{ex.Message}");
-                    }
+                    File.Delete(pinFile);
+                    File.Move(pinFileBak, pinFile);
                 }
+
+                LauncherSystem.CheckGame(kartRiderDirectory);
             }
         }
 

@@ -7,6 +7,7 @@ using System.Threading;
 using KartRider.Common.Utilities;
 using KartRider.IO.Packet;
 using KartRider_PacketName;
+using Profile;
 
 namespace KartRider
 {
@@ -177,16 +178,6 @@ namespace KartRider
                         uint packetName = p.ReadUInt();
                         var packetValue = (PacketName)packetName;
 
-                        string currentTime = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
-                        if (_serverName == "UDP")
-                        {
-                            Console.WriteLine($"[UDP][{currentTime}][{nickname}] " + packetValue + ": " + BitConverter.ToString(p.ToArray()).Replace("-", " "));
-                        }
-                        else if (_serverName == "P2P")
-                        {
-                            Console.WriteLine($"[P2P][{currentTime}][{nickname}] " + packetValue + ": " + BitConverter.ToString(p.ToArray()).Replace("-", " "));
-                        }
-
                         OutPacket outPacket = new OutPacket();
                         if (packetValue == PacketName.PqUdpEcho)
                         {
@@ -234,12 +225,12 @@ namespace KartRider
                                             oPacket.WriteInt((int)PacketName.GameSlotPacket);
 
                                             oPacket.WriteBytes(p.ReadBytes(p.Available));
-                                            if (ClientManager.ClientUdpAddrs.TryGetValue(player.Nickname, out IPEndPoint UdpPoint))
-                                            {
-                                                bool success = BeginSend(oPacket, UdpPoint);
-                                                if (success)
-                                                    Console.WriteLine($"[UDP][{currentTime}][{nickname}] " + packetValue + ": " + BitConverter.ToString(oPacket.ToArray()).Replace("-", " "));
-                                            }
+                                            string currentTime = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
+                                            IPEndPoint client = ClientManager.ClientToIPEndPoint(ProfileService.ProfileConfigs[player.Nickname].Rider.ClientId);
+                                            var clientudp = new IPEndPoint(client.Address, ProfileService.ProfileConfigs[player.Nickname].Rider.UdpPort);
+                                            bool success = BeginSend(oPacket, clientudp);
+                                            if (success)
+                                                Console.WriteLine($"[UDP][{currentTime}][{nickname}] " + packetValue + ": " + BitConverter.ToString(oPacket.ToArray()).Replace("-", " "));
                                         }
                                     }
                                 }

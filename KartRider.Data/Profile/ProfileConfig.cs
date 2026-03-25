@@ -134,6 +134,12 @@ namespace Profile
         public byte AttackType { get; set; } = 0;
 
         public uint Track { get; set; } = 0;
+
+        public string ClientId { get; set; } = "";
+
+        public int P2pPort { get; set; } = 0;
+
+        public int UdpPort { get; set; } = 0;
     }
 
     public class RiderItemData

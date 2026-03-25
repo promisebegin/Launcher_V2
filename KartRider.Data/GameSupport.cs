@@ -211,14 +211,8 @@ namespace KartRider
                 outPacket.WriteString(Nickname);
                 outPacket.WriteInt(1);//ClubMember
                 outPacket.WriteByte(5);//Level
-                if (ClientManager.ClientP2pAddrs.TryGetValue(Nickname, out IPEndPoint P2pPoint))
-                {
-                    outPacket.WriteEndPoint(P2pPoint);
-                }
-                else
-                {
-                    outPacket.WriteEndPoint(new IPEndPoint(0, 0));
-                }
+                IPEndPoint client = ClientManager.ClientToIPEndPoint(ProfileService.ProfileConfigs[Parent.Nickname].Rider.ClientId);
+                outPacket.WriteEndPoint(new IPEndPoint(client.Address, ProfileService.ProfileConfigs[Parent.Nickname].Rider.P2pPort));
                 Parent.Client.Send(outPacket);
             }
         }
