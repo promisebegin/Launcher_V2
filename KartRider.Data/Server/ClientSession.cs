@@ -35,7 +35,10 @@ namespace KartRider
 
         public override void OnDisconnect()
         {
-            this.Parent.Client.Disconnect();
+            if (this.Parent?.Client != null)
+            {
+                this.Parent.Client.Disconnect();
+            }
         }
 
         public override void OnPacket(InPacket iPacket)
@@ -920,7 +923,7 @@ namespace KartRider
                             else
                             {
                                 List<short> tuneList1 = new List<short> { existingList.Tune1, existingList.Tune2, existingList.Tune3 };
-                                List<short> tuneList2 = new List<short>();
+                                List<short> tuneList2 = GameSupport.GetTuns(tuneList1, Item);
                                 using (OutPacket outPacket = new OutPacket("PrUseTuneItem"))
                                 {
                                     outPacket.WriteInt(0);
@@ -929,69 +932,12 @@ namespace KartRider
                                     outPacket.WriteShort(Kart);
                                     outPacket.WriteShort(KartSN);
                                     outPacket.WriteShort(0);
-                                    if (existingList.Tune1 != 0)
-                                    {
-                                        outPacket.WriteShort(existingList.Tune1);
-                                    }
-                                    else
-                                    {
-                                        while (tuneList1.Count < 4)
-                                        {
-                                            short number = short.Parse(random.Next(1, 10).ToString() + "03");
-                                            if (!tuneList1.Contains(number))
-                                            {
-                                                outPacket.WriteShort(number);
-                                                existingList.Tune1 = number;
-                                                tuneList1.Add(number);
-                                                tuneList2.Add(number);
-                                            }
-                                        }
-                                        tuneList1.RemoveAt(3);
-                                    }
-                                    if (existingList.Tune2 != 0)
-                                    {
-                                        outPacket.WriteShort(existingList.Tune2);
-                                    }
-                                    else
-                                    {
-                                        while (tuneList1.Count < 4)
-                                        {
-                                            short number = short.Parse(random.Next(1, 10).ToString() + "03");
-                                            if (!tuneList1.Contains(number))
-                                            {
-                                                if (!tuneList2.Contains(number))
-                                                {
-                                                    outPacket.WriteShort(number);
-                                                    existingList.Tune2 = number;
-                                                    tuneList1.Add(number);
-                                                    tuneList2.Add(number);
-                                                }
-                                            }
-                                        }
-                                        tuneList1.RemoveAt(3);
-                                    }
-                                    if (existingList.Tune3 != 0)
-                                    {
-                                        outPacket.WriteShort(existingList.Tune3);
-                                    }
-                                    else
-                                    {
-                                        while (tuneList1.Count < 4)
-                                        {
-                                            short number = short.Parse(random.Next(1, 10).ToString() + "03");
-                                            if (!tuneList1.Contains(number))
-                                            {
-                                                if (!tuneList2.Contains(number))
-                                                {
-                                                    outPacket.WriteShort(number);
-                                                    existingList.Tune3 = number;
-                                                    tuneList1.Add(number);
-                                                    tuneList2.Add(number);
-                                                }
-                                            }
-                                        }
-                                        tuneList1.RemoveAt(3);
-                                    }
+                                    outPacket.WriteShort(tuneList2[0]);
+                                    existingList.Tune1 = tuneList2[0];
+                                    outPacket.WriteShort(tuneList2[1]);
+                                    existingList.Tune2 = tuneList2[1];
+                                    outPacket.WriteShort(tuneList2[2]);
+                                    existingList.Tune3 = tuneList2[2];
                                     outPacket.WriteShort(existingList.Slot1);
                                     outPacket.WriteShort(existingList.Count1);
                                     outPacket.WriteShort(existingList.Slot2);

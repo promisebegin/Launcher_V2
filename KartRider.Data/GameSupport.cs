@@ -211,8 +211,7 @@ namespace KartRider
                 outPacket.WriteString(Nickname);
                 outPacket.WriteInt(1);//ClubMember
                 outPacket.WriteByte(5);//Level
-                IPEndPoint client = ClientManager.ClientToIPEndPoint(ProfileService.ProfileConfigs[Parent.Nickname].Rider.ClientId);
-                outPacket.WriteEndPoint(new IPEndPoint(client.Address, ProfileService.ProfileConfigs[Parent.Nickname].Rider.P2pPort));
+                outPacket.WriteHexString("A2 0E 90 AB 9A 99");
                 Parent.Client.Send(outPacket);
             }
         }
@@ -453,6 +452,62 @@ namespace KartRider
                 oPacket.WriteBytes(new byte[5]);
                 MultyPlayer.BroadCast(roomId, oPacket);
             }
+        }
+
+        public static List<short> GetTuns(List<short> tunes, short Item)
+        {
+            short[] speed = { 103, 203, 303, 403, 503, 603, 703, 803, 903 };
+            short[] item = { 10103, 10203, 10303, 10401, 10503, 10603, 10703, 10803, 10901, 11001, 11103, 11201, 11301, 11403, 11501, 11601, 11701, 11803, 11903, 12003 };
+            short[] All = new short[speed.Length + item.Length];
+            Array.Copy(speed, 0, All, 0, speed.Length);
+            Array.Copy(item, 0, All, speed.Length, item.Length);
+
+            short[] sourceArray;
+            if (Item == 6)
+            {
+                sourceArray = speed;
+            }
+            else if (Item == 4)
+            {
+                sourceArray = item;
+            }
+            else
+            {
+                sourceArray = All;
+            }
+
+            // ============= 核心逻辑 =============
+            Random random = new Random();
+
+            // 1. 获取当前列表中已存在的非0数字（不能重复使用）
+            HashSet<short> usedNumbers = new HashSet<short>(tunes.Where(x => x != 0));
+
+            // 2. 从源数组中筛选出【可用的候选数字】：不在原列表中
+            var availableNumbers = sourceArray.Where(num => !usedNumbers.Contains(num)).ToList();
+
+            // 3. 找到所有需要填充的 0 的索引
+            var zeroIndexes = tunes
+                .Select((value, index) => new { value, index })
+                .Where(x => x.value == 0)
+                .Select(x => x.index)
+                .ToList();
+
+            // 4. 随机不重复填充每个 0 位置
+            foreach (int index in zeroIndexes)
+            {
+                // 随机取一个可用数字
+                int randomIndex = random.Next(availableNumbers.Count);
+                short selectedNum = availableNumbers[randomIndex];
+
+                // 填充
+                tunes[index] = selectedNum;
+
+                // 从候选池中移除，保证不重复
+                availableNumbers.RemoveAt(randomIndex);
+            }
+
+            // 输出结果查看
+            return tunes;
         }
     }
 }

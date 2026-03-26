@@ -1247,6 +1247,20 @@ public static class MultyPlayer
             }
             return;
         }
+        else if (hash == Adler32Helper.GenerateAdler32_ASCII("ChGetCurrentGpRequestPacket"))
+        {
+            using (OutPacket outPacket = new OutPacket("ChGetCurrentGpReplyPacket"))
+            {
+                outPacket.WriteInt(0);
+                outPacket.WriteInt(0);
+                outPacket.WriteInt(0);
+                outPacket.WriteInt(0);
+                outPacket.WriteInt(0);
+                outPacket.WriteByte(1);
+                Parent.Client.Send(outPacket);
+            }
+            return;
+        }
         else
         {
             return;
