@@ -315,11 +315,14 @@ namespace KartRider
                 var item = new RhoFile();
                 item.DataSource = new FileDataSource(file);
                 item.Name = Path.GetFileName(file);
-                if (extension == ".bml" || extension == ".bmh" || extension == ".bmx" || extension == ".kap" ||
-                    extension == ".ksv" || extension == ".1s" || extension == ".dds")
+                if (extension == ".bmh" || extension == ".bmx" || extension == ".1s" || extension == ".dds")
                     item.FileEncryptionProperty = RhoFileProperty.Compressed;
                 else if (extension == ".xml")
                     item.FileEncryptionProperty = RhoFileProperty.Encrypted;
+                else if (extension == ".jpg" || extension == ".png" || extension == ".kap" || extension == ".ksv")
+                    item.FileEncryptionProperty = RhoFileProperty.PartialEncrypted;
+                else if (extension == ".bml")
+                    item.FileEncryptionProperty = RhoFileProperty.CompressedEncrypted;
                 else
                     item.FileEncryptionProperty = RhoFileProperty.None;
                 folder.AddFile(item);

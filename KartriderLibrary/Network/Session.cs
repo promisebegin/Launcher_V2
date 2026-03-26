@@ -130,7 +130,7 @@ namespace KartRider.Common.Network
                     IPEndPoint clientEndPoint = this._socket.RemoteEndPoint as IPEndPoint;
                     if (clientEndPoint == null) { this.Disconnect(); return; }
                     string clientId = ClientManager.GetClientId(clientEndPoint);
-                    var clientGroup = ClientManager.ClientGroups[clientId];
+                    if (!ClientManager.ClientGroups.TryGetValue(clientId, out var clientGroup)) { this.Disconnect(); return; }
                     byte[] buffer = next.Buffer;
                     byte[] numArray = new byte[(int)buffer.Length + (clientGroup.SIV != 0 ? 8 : 4)];
                     if (clientGroup.SIV != 0)
@@ -230,7 +230,11 @@ namespace KartRider.Common.Network
                                 IPEndPoint clientEndPoint = this._socket.RemoteEndPoint as IPEndPoint;
                                 if (clientEndPoint == null) return;
                                 string clientId = ClientManager.GetClientId(clientEndPoint);
-                                var clientGroup = ClientManager.ClientGroups[clientId];
+                                if (!ClientManager.ClientGroups.TryGetValue(clientId, out var clientGroup))
+                                {
+                                    this.Disconnect();
+                                    return;
+                                }
                                 uint num1 = BitConverter.ToUInt32(this.mBuffer, 0);
                                 if (clientGroup.RIV != 0)
                                 {

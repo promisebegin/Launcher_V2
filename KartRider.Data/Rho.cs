@@ -1,9 +1,11 @@
 using ExcData;
 using KartLibrary.Consts;
+using KartLibrary.Data;
 using KartLibrary.File;
 using KartLibrary.Xml;
 using KartRider;
 using KartRider.Common.Utilities;
+using KartRider.IO.Packet;
 using Profile;
 using RiderData;
 using System;
@@ -23,9 +25,247 @@ namespace RHOParser
         {
             try
             {
+                // Check for sound_bgm_korea.rho and sound_bgm_lotte.rho files
+                string inputDir = Path.GetDirectoryName(input);
+                bool koreaFileExists = File.Exists(Path.Combine(inputDir, "sound_bgm_korea.rho"));
+                bool lotteFileExists = File.Exists(Path.Combine(inputDir, "sound_bgm_lotte.rho"));
+                Console.WriteLine($"Checking for Rho files in: {inputDir}");
+                Console.WriteLine($"sound_bgm_korea.rho exists: {koreaFileExists}");
+                Console.WriteLine($"sound_bgm_lotte.rho exists: {lotteFileExists}");
+
+                // Read the current aaa.pk content
+                byte[] aaaPkData;
+                try
+                {
+                    using (FileStream fileStream = new FileStream(input, FileMode.Open))
+                    {
+                        BinaryReader br = new BinaryReader(fileStream);
+                        int dataLen = br.ReadInt32();
+                        aaaPkData = br.ReadKRData(dataLen);
+                        fileStream.Close();
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Error reading aaa.pk: {ex.Message}");
+                    // If reading fails, return null
+                    return null;
+                }
+
+                BinaryXmlDocument bxmlDoc = new BinaryXmlDocument();
+                bxmlDoc.Read(Encoding.GetEncoding("UTF-16"), aaaPkData);
+                BinaryXmlTag rootTag = bxmlDoc.RootTag;
+
+                // Extract regionCode from the XML
+                string regionCode = "cn"; // Default to CN
+                try
+                {
+                    // Try to find the region code by looking at zeta folders
+                    BinaryXmlTag zetaFolder = null;
+                    foreach (BinaryXmlTag subtag in rootTag.Children)
+                    {
+                        if (subtag.Name == "PackFolder" && subtag.GetAttribute("name") == "zeta")
+                        {
+                            zetaFolder = subtag;
+                            break;
+                        }
+                    }
+
+                    if (zetaFolder != null)
+                    {
+                        foreach (BinaryXmlTag subtag in zetaFolder.Children)
+                        {
+                            if (subtag.Name == "PackFolder")
+                            {
+                                string folderName = subtag.GetAttribute("name");
+                                if (folderName == "kr")
+                                {
+                                    regionCode = "kr";
+                                    break;
+                                }
+                                else if (folderName == "cn")
+                                {
+                                    regionCode = "cn";
+                                    break;
+                                }
+                                else if (folderName == "tw")
+                                {
+                                    regionCode = "tw";
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Error extracting regionCode: {ex.Message}");
+                }
+
+                // Find the sound/bgm folder path
+                BinaryXmlTag soundFolder = null;
+                BinaryXmlTag bgmFolder = null;
+
+                foreach (BinaryXmlTag subtag in rootTag.Children)
+                {
+                    if (subtag.Name == "PackFolder" && subtag.GetAttribute("name") == "sound")
+                    {
+                        soundFolder = subtag;
+                        foreach (BinaryXmlTag soundSubtag in soundFolder.Children)
+                        {
+                            if (soundSubtag.Name == "PackFolder" && soundSubtag.GetAttribute("name") == "bgm")
+                            {
+                                bgmFolder = soundSubtag;
+                                break;
+                            }
+                        }
+                        break;
+                    }
+                }
+
+                if (bgmFolder != null)
+                {
+                    // Check existing RhoFolder entries
+                    bool koreaEntryExists = false;
+                    bool lotteEntryExists = false;
+                    List<BinaryXmlTag> tagsToRemove = new List<BinaryXmlTag>();
+
+                    foreach (BinaryXmlTag tag in bgmFolder.Children)
+                    {
+                        if (tag.Name == "RhoFolder")
+                        {
+                            string fileName = tag.GetAttribute("fileName");
+                            if (fileName == "sound_bgm_korea.rho")
+                            {
+                                koreaEntryExists = true;
+                                if (!koreaFileExists)
+                                {
+                                    tagsToRemove.Add(tag);
+                                }
+                            }
+                            else if (fileName == "sound_bgm_lotte.rho")
+                            {
+                                lotteEntryExists = true;
+                                if (!lotteFileExists)
+                                {
+                                    tagsToRemove.Add(tag);
+                                }
+                            }
+                        }
+                    }
+
+                    // Remove tags for files that don't exist
+                    foreach (BinaryXmlTag tag in tagsToRemove)
+                    {
+                        bgmFolder.Children.Remove(tag);
+                    }
+
+                    // Add missing entries for files that exist
+                    if (koreaFileExists && !koreaEntryExists)
+                    {
+                        BinaryXmlTag koreaTag = new BinaryXmlTag("RhoFolder");
+                        koreaTag.SetAttribute("name", "korea");
+                        koreaTag.SetAttribute("fileName", "sound_bgm_korea.rho");
+                        koreaTag.SetAttribute("key", "3175846090");
+                        koreaTag.SetAttribute("dataHash", "650954873");
+                        koreaTag.SetAttribute("mediaSize", "5170944");
+                        bgmFolder.Children.Add(koreaTag);
+                    }
+
+                    if (lotteFileExists && !lotteEntryExists)
+                    {
+                        BinaryXmlTag lotteTag = new BinaryXmlTag("RhoFolder");
+                        lotteTag.SetAttribute("name", "lotte");
+                        lotteTag.SetAttribute("fileName", "sound_bgm_lotte.rho");
+                        lotteTag.SetAttribute("key", "3181744352");
+                        lotteTag.SetAttribute("dataHash", "3342181949");
+                        lotteTag.SetAttribute("mediaSize", "6950400");
+                        bgmFolder.Children.Add(lotteTag);
+                    }
+
+                    // Save the modified content back to aaa.pk
+                    try
+                    {
+                        string xmlContent = rootTag.ToString();
+                        string tempXmlPath = Path.Combine(Path.GetDirectoryName(input), "temp_aaa.xml");
+                        File.WriteAllText(tempXmlPath, xmlContent, Encoding.GetEncoding("UTF-16"));
+
+                        // Use the same approach as AAAD to write the aaa.pk file
+                        var xdoc = XDocument.Load(tempXmlPath);
+                        if (xdoc.Root == null)
+                        {
+                            Console.WriteLine("Error: Root element is null");
+                            return null;
+                        }
+                        var childCounts = CountChildren(xdoc.Root, 0, new List<int>());
+                        byte[] byteArray;
+                        using (var reader = XmlReader.Create(tempXmlPath))
+                        {
+                            using (var outPacket = new OutPacket())
+                            {
+                                var Count = 0;
+                                while (reader.Read())
+                                    if (reader.NodeType == XmlNodeType.Element)
+                                    {
+                                        var elementName = reader.Name;
+                                        var attCount = reader.AttributeCount;
+                                        outPacket.WriteString(elementName);
+                                        outPacket.WriteInt();
+                                        outPacket.WriteInt(attCount);
+                                        for (var i = 0; i < attCount; i++)
+                                        {
+                                            reader.MoveToAttribute(i);
+                                            var attName = reader.Name;
+                                            outPacket.WriteString(attName);
+                                            var attValue = reader.Value;
+                                            outPacket.WriteString(attValue);
+                                        }
+
+                                        outPacket.WriteInt(childCounts[Count]);
+                                        Count++;
+                                        reader.MoveToElement();
+                                    }
+
+                                byteArray = outPacket.ToArray();
+                            }
+                        }
+
+                        using (var fileStream = new FileStream(input, FileMode.Create))
+                        {
+                            var binaryWriter = new BinaryWriter(fileStream);
+                            binaryWriter.Write(0);
+                            var KRDataLength = binaryWriter.WriteKRData(byteArray, false, true);
+                            binaryWriter.BaseStream.Seek(0, SeekOrigin.Begin);
+                            binaryWriter.Write(KRDataLength);
+                        }
+
+                        // Clean up temporary file
+                        if (File.Exists(tempXmlPath))
+                        {
+                            File.Delete(tempXmlPath);
+                        }
+
+                        Console.WriteLine("Successfully updated aaa.pk");
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"Error writing aaa.pk: {ex.Message}");
+                        // If writing fails, return null
+                        return null;
+                    }
+                }
+
+                // Now open the modified aaa.pk with PackFolderManager
                 PackFolderManager packFolderManager = new PackFolderManager();
-                packFolderManager.OpenDataFolder(input);
-                string regionCode = packFolderManager.regionCode.ToString().ToLower();
+                try
+                {
+                    packFolderManager.OpenDataFolder(input);
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Error opening modified aaa.pk: {ex.Message}");
+                    return null;
+                }
 
                 Queue<PackFolderInfo> packFolderInfoQueue = new Queue<PackFolderInfo>();
                 packFolderInfoQueue.Enqueue(packFolderManager.GetRootFolder());
@@ -824,6 +1064,14 @@ namespace RHOParser
             {
                 return bmlData;
             }
+        }
+
+        private static List<int> CountChildren(XElement element, int level, List<int> childCounts)
+        {
+            var childCount = element.Elements().Count();
+            childCounts.Add(childCount);
+            foreach (var child in element.Elements()) CountChildren(child, level + 1, childCounts);
+            return childCounts;
         }
     }
 }

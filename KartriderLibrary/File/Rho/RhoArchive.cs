@@ -371,6 +371,7 @@ namespace KartLibrary.File
             }
             outFileStream.Close();
             _rhoStream = new FileStream(fullName, FileMode.Open);
+            _closed = false; // 设置为false，表示文件已打开
 
             // send applied changes event to RhoFolder instances
             Queue<RhoFolder> folderQueue = new Queue<RhoFolder>();
