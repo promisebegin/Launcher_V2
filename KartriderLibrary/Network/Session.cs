@@ -182,7 +182,6 @@ namespace KartRider.Common.Network
             if (Interlocked.CompareExchange(ref this.mDisconnected, 1, 0) == 0)
             {
                 this.OnDisconnect();
-                ClientManager.RemoveClient(this.Socket);
                 try
                 {
                     this.Socket.Shutdown(SocketShutdown.Both);

@@ -106,6 +106,10 @@ public static class MultyPlayer
             }
         }
 
+        // 可选：添加退出条件，防止无限循环（比如超时）
+        // 示例：累计等待10秒后退出
+        int waitCount = 0;
+        
         // 第二步：用while循环判断（根据allReady的值执行逻辑）
         // 场景1：等待所有值变为true（循环直到全部为true）
         while (!allReady)
@@ -126,11 +130,8 @@ public static class MultyPlayer
             // 模拟等待（避免死循环，实际场景可替换为业务逻辑）
             System.Threading.Thread.Sleep(1000);
 
-            // 可选：添加退出条件，防止无限循环（比如超时）
-            // 示例：累计等待5秒后退出
-            int waitCount = 0;
             waitCount++;
-            if (waitCount >= 15)
+            if (waitCount >= 10)
             {
                 List<string> unreadyNames = Ready.Keys.Where(x => !Ready[x]).ToList();
                 foreach (string name in unreadyNames)
@@ -142,8 +143,10 @@ public static class MultyPlayer
                         Ready.Remove(name);
                         break;
                     }
+                    break;
                 }
-                break;
+                Set_startTrigger(Parent, room);
+                return;
             }
         }
 
