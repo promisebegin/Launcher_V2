@@ -211,7 +211,9 @@ namespace KartRider
                 outPacket.WriteString(Nickname);
                 outPacket.WriteInt(1);//ClubMember
                 outPacket.WriteByte(5);//Level
-                outPacket.WriteHexString("A2 0E 90 AB 9A 99");
+                IPEndPoint serverEndPoint = Parent.Client.Socket.LocalEndPoint as IPEndPoint;
+                if (serverEndPoint == null) return;
+                outPacket.WriteEndPoint(serverEndPoint.Address, 39322);
                 Parent.Client.Send(outPacket);
             }
         }

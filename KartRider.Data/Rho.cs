@@ -188,52 +188,78 @@ namespace RHOParser
                     }
 
                     // Save the modified content back to aaa.pk
-                    try
+                try
+                {
+                    string xmlContent = rootTag.ToString();
+                    string tempXmlPath = Path.Combine(Path.GetDirectoryName(input), "temp_aaa.xml");
+                    File.WriteAllText(tempXmlPath, xmlContent, Encoding.GetEncoding("UTF-16"));
+
+                    // Use the same approach as AAAD to write the aaa.pk file
+                    var xdoc = XDocument.Load(tempXmlPath);
+                    if (xdoc.Root == null)
                     {
-                        string xmlContent = rootTag.ToString();
-                        string tempXmlPath = Path.Combine(Path.GetDirectoryName(input), "temp_aaa.xml");
-                        File.WriteAllText(tempXmlPath, xmlContent, Encoding.GetEncoding("UTF-16"));
-
-                        // Use the same approach as AAAD to write the aaa.pk file
-                        var xdoc = XDocument.Load(tempXmlPath);
-                        if (xdoc.Root == null)
+                        Console.WriteLine("Error: Root element is null");
+                        return null;
+                    }
+                    var childCounts = CountChildren(xdoc.Root, 0, new List<int>());
+                    byte[] byteArray;
+                    using (var reader = XmlReader.Create(tempXmlPath))
+                    {
+                        using (var outPacket = new OutPacket())
                         {
-                            Console.WriteLine("Error: Root element is null");
-                            return null;
-                        }
-                        var childCounts = CountChildren(xdoc.Root, 0, new List<int>());
-                        byte[] byteArray;
-                        using (var reader = XmlReader.Create(tempXmlPath))
-                        {
-                            using (var outPacket = new OutPacket())
-                            {
-                                var Count = 0;
-                                while (reader.Read())
-                                    if (reader.NodeType == XmlNodeType.Element)
+                            var Count = 0;
+                            while (reader.Read())
+                                if (reader.NodeType == XmlNodeType.Element)
+                                {
+                                    var elementName = reader.Name;
+                                    var attCount = reader.AttributeCount;
+                                    outPacket.WriteString(elementName);
+                                    outPacket.WriteInt();
+                                    outPacket.WriteInt(attCount);
+                                    for (var i = 0; i < attCount; i++)
                                     {
-                                        var elementName = reader.Name;
-                                        var attCount = reader.AttributeCount;
-                                        outPacket.WriteString(elementName);
-                                        outPacket.WriteInt();
-                                        outPacket.WriteInt(attCount);
-                                        for (var i = 0; i < attCount; i++)
-                                        {
-                                            reader.MoveToAttribute(i);
-                                            var attName = reader.Name;
-                                            outPacket.WriteString(attName);
-                                            var attValue = reader.Value;
-                                            outPacket.WriteString(attValue);
-                                        }
-
-                                        outPacket.WriteInt(childCounts[Count]);
-                                        Count++;
-                                        reader.MoveToElement();
+                                        reader.MoveToAttribute(i);
+                                        var attName = reader.Name;
+                                        outPacket.WriteString(attName);
+                                        var attValue = reader.Value;
+                                        outPacket.WriteString(attValue);
                                     }
 
-                                byteArray = outPacket.ToArray();
-                            }
-                        }
+                                    outPacket.WriteInt(childCounts[Count]);
+                                    Count++;
+                                    reader.MoveToElement();
+                                }
 
+                            byteArray = outPacket.ToArray();
+                        }
+                    }
+
+                    // Generate the modified content for comparison
+                    byte[] modifiedData;
+                    using (var memoryStream = new MemoryStream())
+                    {
+                        var binaryWriter = new BinaryWriter(memoryStream);
+                        binaryWriter.Write(0);
+                        var KRDataLength = binaryWriter.WriteKRData(byteArray, false, true);
+                        binaryWriter.BaseStream.Seek(0, SeekOrigin.Begin);
+                        binaryWriter.Write(KRDataLength);
+                        modifiedData = memoryStream.ToArray();
+                    }
+
+                    // Compare with original data
+                    bool contentChanged = true;
+                    if (aaaPkData != null)
+                    {
+                        using (var originalStream = new MemoryStream(aaaPkData))
+                        using (var modifiedStream = new MemoryStream(modifiedData))
+                        {
+                            contentChanged = !StreamsAreEqual(originalStream, modifiedStream);
+                        }
+                    }
+
+                    // Only save if content has changed
+                    if (contentChanged)
+                    {
                         using (var fileStream = new FileStream(input, FileMode.Create))
                         {
                             var binaryWriter = new BinaryWriter(fileStream);
@@ -242,21 +268,25 @@ namespace RHOParser
                             binaryWriter.BaseStream.Seek(0, SeekOrigin.Begin);
                             binaryWriter.Write(KRDataLength);
                         }
-
-                        // Clean up temporary file
-                        if (File.Exists(tempXmlPath))
-                        {
-                            File.Delete(tempXmlPath);
-                        }
-
                         Console.WriteLine("Successfully updated aaa.pk");
                     }
-                    catch (Exception ex)
+                    else
                     {
-                        Console.WriteLine($"Error writing aaa.pk: {ex.Message}");
-                        // If writing fails, return null
-                        return null;
+                        Console.WriteLine("aaa.pk content unchanged, no need to save");
                     }
+
+                    // Clean up temporary file
+                    if (File.Exists(tempXmlPath))
+                    {
+                        File.Delete(tempXmlPath);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Error writing aaa.pk: {ex.Message}");
+                    // If writing fails, return null
+                    return null;
+                }
                 }
 
                 // Now open the modified aaa.pk with PackFolderManager
@@ -1033,6 +1063,40 @@ namespace RHOParser
         private static string ReplacePath(string file)
         {
             return file.IndexOf(".rho") > -1 ? file.Substring(0, file.IndexOf(".rho")).Replace("_", "/") + file.Substring(file.IndexOf(".rho") + 4) : file;
+        }
+
+        private static bool StreamsAreEqual(Stream stream1, Stream stream2)
+        {
+            const int bufferSize = 4096;
+            byte[] buffer1 = new byte[bufferSize];
+            byte[] buffer2 = new byte[bufferSize];
+
+            try
+            {
+                int bytesRead1;
+                int bytesRead2;
+
+                do
+                {
+                    bytesRead1 = stream1.Read(buffer1, 0, bufferSize);
+                    bytesRead2 = stream2.Read(buffer2, 0, bufferSize);
+
+                    if (bytesRead1 != bytesRead2)
+                        return false;
+
+                    for (int i = 0; i < bytesRead1; i++)
+                    {
+                        if (buffer1[i] != buffer2[i])
+                            return false;
+                    }
+                } while (bytesRead1 > 0);
+
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
         }
 
         private static void ProcessNodes(XmlNodeList nodes, string attributeName, string suffix = "")

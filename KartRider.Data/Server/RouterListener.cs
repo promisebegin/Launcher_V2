@@ -15,11 +15,11 @@ namespace KartRider
     {
         public static IPAddress sIP {  get; set; }
 
-        public static System.Net.IPEndPoint CurrentUDPServer { get; set; }
-
         public static TcpListener Listener { get; private set; }
 
         public static SessionGroup MySession { get; set; }
+
+        public static MsgrServer MsgrServer = new MsgrServer("MsgrServer", 39322);
 
         public static UdpServer UDPServer = new UdpServer("UDP", ProfileService.SettingConfig.ServerPort);
 
@@ -64,6 +64,7 @@ namespace KartRider
             // 启动服务端
             UDPServer.Start();
             P2PServer.Start();
+            MsgrServer.Start();
 
             if (RouterListener.Listener == null)
             {
