@@ -132,18 +132,6 @@ public static class MultyPlayer
             waitCount++;
             if (waitCount >= 30)
             {
-                List<string> unreadyNames = Ready.Keys.Where(x => !Ready[x]).ToList();
-                foreach (string name in unreadyNames)
-                {
-                    List<RoomMember> players = room._slots.Where(x => x is Player p && p.Nickname == name).ToList();
-                    foreach (Player player in players)
-                    {
-                        player.Session.Client.Disconnect();
-                        Ready.Remove(name);
-                        break;
-                    }
-                    break;
-                }
                 Set_startTrigger(Parent, room);
                 return;
             }
@@ -298,6 +286,7 @@ public static class MultyPlayer
             {
                 if (member is Player p3)
                 {
+                    p3.PlayerType = 2; // 初始玩家状态
                     // Ensure profile is loaded for the player
                     if (!ProfileService.ProfileConfigs.ContainsKey(p3.Nickname))
                     {
@@ -742,7 +731,13 @@ public static class MultyPlayer
 
             if (room.track < 100)
             {
+                if (room.trackList.Count > 30)
+                {
+                    room.trackList.Clear();
+                }
+
                 uint track;
+
                 do
                 {
                     track = RandomTrack.GetRandomTrack(Parent.Nickname, room.RandomTrackGameType, room.track);
@@ -1317,7 +1312,17 @@ public static class MultyPlayer
                 {
                     outPacket.WriteByte(0);
                 }
-                outPacket.WriteInt(p.ID);
+
+                if (room.Ranking.ContainsKey(p.ID))
+                {
+                    outPacket.WriteInt(room.Ranking[p.ID]);
+                }
+                else
+                {
+                    int nextValue = room.Ranking.Any() ? room.Ranking.Values.Max() + 1 : 0;
+                    room.Ranking[p.ID] = nextValue;
+                    outPacket.WriteInt(nextValue);
+                }
 
                 outPacket.WriteBytes(new byte[30]);
 
