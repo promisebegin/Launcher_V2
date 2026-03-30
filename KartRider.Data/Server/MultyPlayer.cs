@@ -1229,7 +1229,7 @@ public static class MultyPlayer
                     outPacket.WriteInt(roomId);
                     var channel = GameSupport.Channels.FirstOrDefault(c => c.Value.GameType == room.GameType).Key;
                     outPacket.WriteInt(channel);
-                    outPacket.WriteByte(1);
+                    outPacket.WriteBool(room.Lock);
                     outPacket.WriteByte(1);
                     Parent.Client.Send(outPacket);
                 }
