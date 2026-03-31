@@ -531,6 +531,8 @@ public static class MultyPlayer
                 {
                     Parent.Nickname = nickname;
                 }
+                ProfileService.ProfileConfigs[nickname].Rider.ClientId = clientId;
+                ProfileService.Save(nickname);
             }
             using (OutPacket oPacket = new OutPacket("PrChannelMoveIn"))
             {
