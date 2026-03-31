@@ -129,8 +129,6 @@ namespace Profile
 
         public byte IdentificationType { get; set; } = 1;
 
-        public byte EnterMyRoomType { get; set; } = 0;
-
         public int ScenarioType { get; set; } = 0;
 
         public byte AttackType { get; set; } = 0;

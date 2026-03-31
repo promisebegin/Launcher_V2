@@ -241,6 +241,37 @@ namespace KartRider
                                 }
                             }
                         }
+                        else if (packetValue == PacketName.RoomSlotPacket)
+                        {
+                            string owner = MyRoomData.GetRoomOwnerByNickname(nickname);
+                            if (!string.IsNullOrEmpty(owner))
+                            {
+                                var members = MyRoomData.GetRoomPlayers(owner);
+                                foreach (var member in members)
+                                {
+                                    if (string.IsNullOrEmpty(member) || string.Equals(member, nickname, StringComparison.OrdinalIgnoreCase))
+                                        continue;
+
+                                    if (!Profile.ProfileService.ProfileConfigs.ContainsKey(member))
+                                        Profile.ProfileService.Load(member);
+
+                                    OutPacket oPacket = new OutPacket();
+                                    oPacket.WriteUInt(ClientManager.GetUserNO(member));
+                                    oPacket.WriteUInt(hash);
+                                    oPacket.WriteInt((int)PacketName.RoomSlotPacket);
+                                    oPacket.WriteBytes(p.ReadBytes(p.Available));
+
+                                    IPEndPoint client = ClientManager.ClientToIPEndPoint(ProfileService.ProfileConfigs[member].Rider.ClientId);
+                                    var clientudp = new IPEndPoint(client.Address, ProfileService.ProfileConfigs[member].Rider.UdpPort);
+                                    bool success = BeginSend(oPacket, clientudp);
+                                    if (success)
+                                    {
+                                        string currentTime = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
+                                        Console.WriteLine($"[UDP][{currentTime}][{nickname}] {packetValue}: {BitConverter.ToString(oPacket.ToArray()).Replace("-", " ")}");
+                                    }
+                                }
+                            }
+                        }
                         else
                         {
                             Console.WriteLine($"Unknown Packet on UDP : {packetValue}");

@@ -64,6 +64,10 @@ public static class ClientManager
             {
                 RoomManager.RemovePlayer(roomId, (byte)slotId);
             }
+            if (!string.IsNullOrEmpty(ClientGroup.Nickname))
+            {
+                MyRoomData.TryLeaveMyRoom(ClientGroup.Nickname);
+            }
             ClientGroups.TryRemove(clientId, out _);
             Console.WriteLine($"客户端 {clientId} 已断开，当前在线数：{_clientSessions.Count}");
         }

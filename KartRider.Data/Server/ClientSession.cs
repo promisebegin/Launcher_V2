@@ -449,53 +449,21 @@ namespace KartRider
                     }
                     else if (hash == Adler32Helper.GenerateAdler32_ASCII("ChReRqEnterMyRoomPacket", 0) || hash == Adler32Helper.GenerateAdler32_ASCII("ChRqEnterRandomMyRoomPacket", 0))
                     {
-                        if (hash == 1733888222)//ChReRqEnterMyRoomPacket
-                        {
-                            ProfileService.ProfileConfigs[this.Parent.Nickname].Rider.EnterMyRoomType = 0;
-                        }
-                        else if (hash == 2423851656)//ChRqEnterRandomMyRoomPacket
-                        {
-                            ProfileService.ProfileConfigs[this.Parent.Nickname].Rider.EnterMyRoomType = 5;
-                        }
-                        GameSupport.ChRpEnterMyRoomPacket(this.Parent, this.Parent.Nickname);
-                        ProfileService.Save(this.Parent.Nickname);
+                        Random random = new Random();
+                        int randomIndex = random.Next(ClientManager.NicknameToUserNO.Keys.Count);
+                        string targetNickname = ClientManager.NicknameToUserNO.Keys.ElementAt(randomIndex);
+                        MyRoomData.ChRpEnterMyRoomPacket(this.Parent, this.Parent.Nickname, targetNickname);
                         return;
                     }
                     else if (hash == Adler32Helper.GenerateAdler32_ASCII("ChRqEnterMyRoomPacket", 0))
                     {
                         string nickname = iPacket.ReadString(false);
-                        if (nickname == this.Parent.Nickname)
-                        {
-                            ProfileService.ProfileConfigs[this.Parent.Nickname].Rider.EnterMyRoomType = 0;
-                        }
-                        else
-                        {
-                            ProfileService.ProfileConfigs[this.Parent.Nickname].Rider.EnterMyRoomType = 3;
-                        }
-                        GameSupport.ChRpEnterMyRoomPacket(this.Parent, this.Parent.Nickname);
-                        ProfileService.Save(this.Parent.Nickname);
+                        MyRoomData.ChRpEnterMyRoomPacket(this.Parent, this.Parent.Nickname, nickname);
                         return;
                     }
                     else if (hash == Adler32Helper.GenerateAdler32_ASCII("RmFirstRequestPacket", 0))
                     {
-                        using (OutPacket outPacket = new OutPacket("RmSlotDataPacket"))
-                        {
-                            outPacket.WriteUInt(ClientManager.GetUserNO(this.Parent.Nickname));
-                            IPEndPoint client = ClientManager.ClientToIPEndPoint(ProfileService.ProfileConfigs[this.Parent.Nickname].Rider.ClientId);
-                            outPacket.WriteEndPoint(new IPEndPoint(client.Address, ProfileService.ProfileConfigs[this.Parent.Nickname].Rider.P2pPort));
-                            outPacket.WriteEndPoint(new IPEndPoint(client.Address, ProfileService.ProfileConfigs[this.Parent.Nickname].Rider.UdpPort));
-                            outPacket.WriteString(this.Parent.Nickname);
-                            GameSupport.GetRider(this.Parent.Nickname, outPacket);
-                            outPacket.WriteUInt(ProfileService.ProfileConfigs[this.Parent.Nickname].Rider.RP);
-                            outPacket.WriteBytes(new byte[29]);
-                            outPacket.WriteString(ProfileService.ProfileConfigs[this.Parent.Nickname].Rider.ClubName);
-                            outPacket.WriteByte();
-                            for (int i = 0; i < 7; i++)
-                            {
-                                outPacket.WriteBytes(new byte[133]);
-                            }
-                            this.Parent.Client.Send(outPacket);
-                        }
+                        MyRoomData.RmSlotDataPacket(this.Parent, this.Parent.Nickname);
                         return;
                     }
                     else if (hash == Adler32Helper.GenerateAdler32_ASCII("RmNotiMyRoomInfoPacket", 0))
@@ -512,15 +480,28 @@ namespace KartRider
                         ProfileService.ProfileConfigs[this.Parent.Nickname].MyRoom.MyRoomKart1 = iPacket.ReadShort();
                         ProfileService.ProfileConfigs[this.Parent.Nickname].MyRoom.MyRoomKart2 = iPacket.ReadShort();
                         ProfileService.Save(this.Parent.Nickname);
-                        GameSupport.RmNotiMyRoomInfoPacket(this.Parent, this.Parent.Nickname);
+                        MyRoomData.RmNotiMyRoomInfoPacket(this.Parent, this.Parent.Nickname);
                         return;
                     }
                     else if (hash == Adler32Helper.GenerateAdler32_ASCII("ChRqSecedeMyRoomPacket", 0))
                     {
-                        //마이룸 나갈때
-                        using (OutPacket outPacket = new OutPacket("ChRpSecedeMyRoomPacket"))
+                        // 마이룸 나갈 때
+                        MyRoomData.ChRpSecedeMyRoomPacket(this.Parent, this.Parent.Nickname);
+                        return;
+                    }
+                    else if (hash == Adler32Helper.GenerateAdler32_ASCII("RmRiderTalkPacket", 0))
+                    {
+                        string message = iPacket.ReadString(false);
+                        MyRoomData.RmRiderTalkPacket(this.Parent.Nickname, message);
+                        return;
+                    }
+                    else if (hash == Adler32Helper.GenerateAdler32_ASCII("ChRqMyroomCheckPassEtcPacket", 0))
+                    {
+                        int id = iPacket.ReadInt();
+                        using (OutPacket outPacket = new OutPacket("ChRpMyroomCheckPassEtcPacket"))
                         {
-                            outPacket.WriteByte(1);
+                            outPacket.WriteInt(id);
+                            outPacket.WriteInt(0); // 1
                             this.Parent.Client.Send(outPacket);
                         }
                         return;

@@ -126,98 +126,6 @@ namespace KartRider
             }
         }
 
-        public static void ChRpEnterMyRoomPacket(SessionGroup Parent, string Nickname)
-        {
-            if (ProfileService.ProfileConfigs[Nickname].Rider.EnterMyRoomType == 0)
-            {
-                using (OutPacket outPacket = new OutPacket("ChRpEnterMyRoomPacket"))
-                {
-                    outPacket.WriteString(Nickname);
-                    outPacket.WriteByte(0);
-                    outPacket.WriteShort(ProfileService.ProfileConfigs[Nickname].MyRoom.MyRoom);
-                    outPacket.WriteByte(ProfileService.ProfileConfigs[Nickname].MyRoom.MyRoomBGM);
-                    outPacket.WriteByte(ProfileService.ProfileConfigs[Nickname].MyRoom.UseRoomPwd);
-                    outPacket.WriteByte(0);
-                    outPacket.WriteByte(ProfileService.ProfileConfigs[Nickname].MyRoom.UseItemPwd);
-                    outPacket.WriteByte(ProfileService.ProfileConfigs[Nickname].MyRoom.TalkLock);
-                    outPacket.WriteString(ProfileService.ProfileConfigs[Nickname].MyRoom.RoomPwd);
-                    outPacket.WriteString("");
-                    outPacket.WriteString(ProfileService.ProfileConfigs[Nickname].MyRoom.ItemPwd);
-                    outPacket.WriteShort(ProfileService.ProfileConfigs[Nickname].MyRoom.MyRoomKart1);
-                    outPacket.WriteShort(ProfileService.ProfileConfigs[Nickname].MyRoom.MyRoomKart2);
-                    Parent.Client.Send(outPacket);
-                }
-            }
-            else
-            {
-                using (OutPacket outPacket = new OutPacket("ChRpEnterMyRoomPacket"))
-                {
-                    outPacket.WriteString("");
-                    outPacket.WriteByte(ProfileService.ProfileConfigs[Nickname].Rider.EnterMyRoomType);
-                    outPacket.WriteShort(0);
-                    outPacket.WriteByte(0);
-                    outPacket.WriteByte(0);
-                    outPacket.WriteByte(0);
-                    outPacket.WriteByte(0);
-                    outPacket.WriteByte(1);
-                    outPacket.WriteString("");//RoomPwd
-                    outPacket.WriteString("");
-                    outPacket.WriteString("");//ItemPwd 
-                    outPacket.WriteShort(0);
-                    outPacket.WriteShort(0);
-                    Parent.Client.Send(outPacket);
-                }
-            }
-        }
-
-        public static void RmNotiMyRoomInfoPacket(SessionGroup Parent, string Nickname)
-        {
-            using (OutPacket outPacket = new OutPacket("RmNotiMyRoomInfoPacket"))
-            {
-                outPacket.WriteShort(ProfileService.ProfileConfigs[Nickname].MyRoom.MyRoom);
-                outPacket.WriteByte(ProfileService.ProfileConfigs[Nickname].MyRoom.MyRoomBGM);
-                outPacket.WriteByte(ProfileService.ProfileConfigs[Nickname].MyRoom.UseRoomPwd);
-                outPacket.WriteByte(0);
-                outPacket.WriteByte(ProfileService.ProfileConfigs[Nickname].MyRoom.UseItemPwd);
-                outPacket.WriteByte(ProfileService.ProfileConfigs[Nickname].MyRoom.TalkLock);
-                outPacket.WriteString(ProfileService.ProfileConfigs[Nickname].MyRoom.RoomPwd);
-                outPacket.WriteString("");
-                outPacket.WriteString(ProfileService.ProfileConfigs[Nickname].MyRoom.ItemPwd);
-                outPacket.WriteShort(ProfileService.ProfileConfigs[Nickname].MyRoom.MyRoomKart1);
-                outPacket.WriteShort(ProfileService.ProfileConfigs[Nickname].MyRoom.MyRoomKart2);
-                Parent.Client.Send(outPacket);
-            }
-        }
-
-        public static void PrCheckMyClubStatePacket(SessionGroup Parent, string Nickname)
-        {
-            using (OutPacket outPacket = new OutPacket("PrCheckMyClubStatePacket"))
-            {
-                if (ProfileService.ProfileConfigs[Nickname].Rider.ClubMark_LOGO == 0)
-                {
-                    outPacket.WriteInt(0);
-                    outPacket.WriteString("");
-                    outPacket.WriteInt(0);
-                    outPacket.WriteInt(0);
-                }
-                else
-                {
-                    outPacket.WriteInt(ProfileService.ProfileConfigs[Nickname].Rider.ClubCode);
-                    outPacket.WriteString(ProfileService.ProfileConfigs[Nickname].Rider.ClubName);
-                    outPacket.WriteInt(ProfileService.ProfileConfigs[Nickname].Rider.ClubMark_LOGO);
-                    outPacket.WriteInt(ProfileService.ProfileConfigs[Nickname].Rider.ClubMark_LINE);
-                }
-                outPacket.WriteShort(5);//Grade
-                outPacket.WriteString(Nickname);
-                outPacket.WriteInt(0);//ClubMember
-                outPacket.WriteByte(5);//Level
-                IPEndPoint serverEndPoint = Parent.Client.Socket.LocalEndPoint as IPEndPoint;
-                if (serverEndPoint == null) return;
-                outPacket.WriteEndPoint(serverEndPoint.Address, 39322);
-                Parent.Client.Send(outPacket);
-            }
-        }
-
         public static void ChRequestChStaticReplyPacket(SessionGroup Parent)
         {
             byte[] abcd = Array.Empty<byte>();
@@ -374,6 +282,35 @@ namespace KartRider
                 outPacket.WriteInt(0);
                 outPacket.WriteByte(ProfileService.ProfileConfigs[nickname].Rider.Ranker);
                 outPacket.WriteBytes(new byte[30]);
+                Parent.Client.Send(outPacket);
+            }
+        }
+
+        public static void PrCheckMyClubStatePacket(SessionGroup Parent, string Nickname)
+        {
+            using (OutPacket outPacket = new OutPacket("PrCheckMyClubStatePacket"))
+            {
+                if (ProfileService.ProfileConfigs[Nickname].Rider.ClubMark_LOGO == 0)
+                {
+                    outPacket.WriteInt(0);
+                    outPacket.WriteString("");
+                    outPacket.WriteInt(0);
+                    outPacket.WriteInt(0);
+                }
+                else
+                {
+                    outPacket.WriteInt(ProfileService.ProfileConfigs[Nickname].Rider.ClubCode);
+                    outPacket.WriteString(ProfileService.ProfileConfigs[Nickname].Rider.ClubName);
+                    outPacket.WriteInt(ProfileService.ProfileConfigs[Nickname].Rider.ClubMark_LOGO);
+                    outPacket.WriteInt(ProfileService.ProfileConfigs[Nickname].Rider.ClubMark_LINE);
+                }
+                outPacket.WriteShort(5);//Grade
+                outPacket.WriteString(Nickname);
+                outPacket.WriteInt(0);//ClubMember
+                outPacket.WriteByte(5);//Level
+                IPEndPoint serverEndPoint = Parent.Client.Socket.LocalEndPoint as IPEndPoint;
+                if (serverEndPoint == null) return;
+                outPacket.WriteEndPoint(serverEndPoint.Address, 39322);
                 Parent.Client.Send(outPacket);
             }
         }
