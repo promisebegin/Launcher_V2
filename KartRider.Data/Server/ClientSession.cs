@@ -97,8 +97,10 @@ namespace KartRider
                     if (hash == Adler32Helper.GenerateAdler32_ASCII("LoRqAddRacingTimePacket", 0))
                     {
                         uint Track = iPacket.ReadUInt();
-                        iPacket.ReadBytes(10);
-                        short Kart = iPacket.ReadShort();
+                        byte SpeedType = iPacket.ReadByte();
+                        byte GameType = iPacket.ReadByte();
+                        iPacket.ReadBytes(8);
+                        ushort Kart = iPacket.ReadUShort();
                         //iPacket.ReadBytes(417);
                         iPacket.Position = iPacket.Length - 8;
                         short Booster = iPacket.ReadShort();
@@ -114,6 +116,13 @@ namespace KartRider
                             outPacket.WriteInt(0);
                             this.Parent.Client.Send(outPacket);
                         }
+                        TrackRankData.AddTrackRank(Track, SpeedType, GameType, new TrackRank
+                        {
+                            UserNO = ClientManager.GetUserNO(this.Parent.Nickname),
+                            Nickname = this.Parent.Nickname,
+                            Kart = Kart,
+                            Time = Time[this.Parent.Nickname]
+                        });
                         var manager = new CompetitiveDataManager();
                         CompleteTrackScoreCalculator calculator = new CompleteTrackScoreCalculator();
                         var scores = calculator.CalculateTrackScoreDetails(Track, Time[this.Parent.Nickname], Booster, Crash, TimeAttack.TrackDictionary);
@@ -130,7 +139,7 @@ namespace KartRider
                             {
                                 outPacket.WriteUInt(competitive.Track);
                                 outPacket.WriteUInt(competitive.Track);
-                                outPacket.WriteShort(competitive.Kart);
+                                outPacket.WriteUShort(competitive.Kart);
                                 outPacket.WriteUInt(competitive.Time);
                                 outPacket.WriteHexString("FF FF FF FF");
                                 outPacket.WriteShort(competitive.Booster);
@@ -1242,14 +1251,7 @@ namespace KartRider
                         ProfileService.Save(this.Parent.Nickname);
                         byte SpeedType = iPacket.ReadByte();
                         byte GameType = iPacket.ReadByte();
-                        using (OutPacket outPacket = new OutPacket("LoRpGetTrackRankPacket"))
-                        {
-                            outPacket.WriteUInt(track);
-                            outPacket.WriteByte(SpeedType);
-                            outPacket.WriteByte(GameType);
-                            outPacket.WriteInt(0);
-                            this.Parent.Client.Send(outPacket);
-                        }
+                        TrackRankData.LoRpGetTrackRankPacket(this.Parent, track, SpeedType, GameType);
                         return;
                     }
                     else if (hash == Adler32Helper.GenerateAdler32_ASCII("PqFavoriteTrackUpdate", 0))
@@ -2300,7 +2302,7 @@ namespace KartRider
                             {
                                 outPacket.WriteUInt(competitive.Track);
                                 outPacket.WriteUInt(competitive.Track);
-                                outPacket.WriteShort(competitive.Kart);
+                                outPacket.WriteUShort(competitive.Kart);
                                 outPacket.WriteUInt(competitive.Time);
                                 outPacket.WriteHexString("FF FF FF FF");
                                 outPacket.WriteShort(competitive.Booster);

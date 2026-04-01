@@ -13,7 +13,7 @@ namespace RHOParser
     public class CompetitiveData
     {
         public uint Track { get; set; }
-        public short Kart { get; set; }
+        public ushort Kart { get; set; }
         public uint Time { get; set; }
         public short Booster { get; set; }
         public uint BoosterPoint { get; set; }

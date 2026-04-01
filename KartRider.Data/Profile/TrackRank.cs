@@ -1,0 +1,75 @@
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Windows.Forms;
+using KartRider.IO.Packet;
+using Profile;
+
+namespace KartRider;
+
+public class TrackRank
+{
+    public uint UserNO { get; set; }
+    public string Nickname { get; set; }
+    public ushort Kart { get; set; }
+    public uint Time { get; set; }
+}
+
+public static class TrackRankData
+{
+    public static void LoRpGetTrackRankPacket(SessionGroup Parent, uint track, byte SpeedType, byte GameType)
+    {
+        if (!Directory.Exists(FileName.Load_TrackRank))
+        {
+            Directory.CreateDirectory(FileName.Load_TrackRank);
+        }
+        string filePath = Path.Combine(FileName.Load_TrackRank, $"{track}_{SpeedType}_{GameType}.json");
+        using (OutPacket outPacket = new OutPacket("LoRpGetTrackRankPacket"))
+        {
+            outPacket.WriteUInt(track);
+            outPacket.WriteByte(SpeedType);
+            outPacket.WriteByte(GameType);
+            if (!File.Exists(filePath))
+            {
+                outPacket.WriteInt(0);
+                Parent.Client.Send(outPacket);
+                return;
+            }
+            else
+            {
+                List<TrackRank> trackRanks = JsonHelper.DeserializeNoBom<List<TrackRank>>(filePath);
+                outPacket.WriteInt(trackRanks.Count);
+                int index = 1;
+                foreach (var rank in trackRanks)
+                {
+                    outPacket.WriteInt(index++);
+                    outPacket.WriteUInt(rank.UserNO);
+                    outPacket.WriteString(rank.Nickname);
+                    outPacket.WriteInt(0);
+                    outPacket.WriteUShort(rank.Kart);
+                    outPacket.WriteUInt(rank.Time);
+                }
+                Parent.Client.Send(outPacket);
+                return;
+            }
+        }
+    }
+
+    public static void AddTrackRank(uint track, byte SpeedType, byte GameType, TrackRank newRank)
+    {
+        if (!Directory.Exists(FileName.Load_TrackRank))
+        {
+            Directory.CreateDirectory(FileName.Load_TrackRank);
+        }
+        string filePath = Path.Combine(FileName.Load_TrackRank, $"{track}_{SpeedType}_{GameType}.json");
+        List<TrackRank> trackRanks = new List<TrackRank>();
+        if (File.Exists(filePath))
+        {
+            trackRanks = JsonHelper.DeserializeNoBom<List<TrackRank>>(filePath);
+        }
+        trackRanks.Add(newRank);
+        trackRanks = trackRanks.OrderBy(t => t.Time).Take(10).ToList();
+        File.WriteAllText(filePath, JsonHelper.Serialize(trackRanks));
+        return;
+    }
+}
