@@ -10,6 +10,7 @@ public static class ModManager
 {
     private static List<IMod> ModList { get; } = new();
     private static string ModPath { get; set; } = string.Empty;
+
     public static event Action OnAllModLoaded; // 所有Mod加载完成后事件
 
     // 初始化ModManager
@@ -17,6 +18,7 @@ public static class ModManager
     {
         // 定义mod路径
         ModPath = Path.Combine(RootDirectory, "Mods");
+
         Console.WriteLine($"Mod加载路径: {ModPath}");
 
         // 检查mod路径是否存在
@@ -28,7 +30,7 @@ public static class ModManager
         // 加载所有Mod
         LoadMods(ModPath);
         Console.WriteLine($"Mod加载完成，共加载 {ModList.Count} 个 Mod。");
-        
+
         OnAllModLoaded?.Invoke();
     }
 
@@ -71,19 +73,6 @@ public static class ModManager
             }
         }
     }
-
-    // public static MethodInfo GetModMethod(string modName, string methodName)
-    // {
-    //     foreach (var mod in ModList)
-    //     {
-    //         if (mod.Name == modName)
-    //         {
-    //             return mod.GetType().GetMethod(methodName);
-    //         }
-    //     }
-    //     Console.WriteLine($"[错误] 未找到 Mod: {modName}");
-    //     return null;
-    // }
 
     // 获取某个Mod的方法
     public static Func<object[], object> GetModAction(string modName, string methodName)
