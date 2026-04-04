@@ -129,7 +129,7 @@ namespace Profile
 
         public ushort SlotChanger { get; set; } = (ushort)short.MaxValue;
 
-        public uint pmap { get; set; } = 0; //3130 //1068 //2520 //718
+        public uint pmap { get; set; } = 0; //3130 //1068 //2520 //ObMaster:718 //Ob:590
 
         public byte IdentificationType { get; set; } = 1;
 

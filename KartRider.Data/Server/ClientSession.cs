@@ -59,6 +59,8 @@ namespace KartRider
                     string dataPacket = Base64Helper.Decode(iPacket.ReadString(true));
                     DataPacket packet = JsonHelper.Deserialize<DataPacket>(dataPacket);
                     if (packet == null) return;
+                    if (string.IsNullOrEmpty(packet.Nickname))
+                        return;
                     if (ClientManager.HasClientWithNickname(packet.Nickname))
                     {
                         if (ProfileService.ProfileConfigs[packet.Nickname].Rider.BanType == 0)
@@ -83,6 +85,13 @@ namespace KartRider
                     FileName.Load(packet.Nickname);
                     uint UserNO = ClientManager.GetUserNO(packet.Nickname);
                     ProfileService.ProfileConfigs[packet.Nickname].Rider.ClientId = clientId;
+                    if (packet.Nickname.Length > 1 && packet.Nickname.StartsWith("ob", StringComparison.OrdinalIgnoreCase))
+                    {
+                        if (ProfileService.ProfileConfigs[packet.Nickname].Rider.pmap == 0)
+                        {
+                            ProfileService.ProfileConfigs[packet.Nickname].Rider.pmap = 590;
+                        }
+                    }
                     ProfileService.Save(packet.Nickname);
                     return;
                 }
@@ -2763,7 +2772,6 @@ namespace KartRider
                             outPacket.WriteInt(0);
                             outPacket.WriteByte(0);
                             outPacket.WriteHexString("FF FF 5F 54");
-                            // outPacket.WriteUInt(718);
                             outPacket.WriteUInt(ProfileService.ProfileConfigs[this.Parent.Nickname].Rider.pmap);
                             for (int i = 0; i < 11; i++)
                             {

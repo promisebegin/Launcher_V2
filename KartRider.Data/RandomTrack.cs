@@ -39,6 +39,37 @@ namespace KartRider
             }
         }
 
+        public static uint GetHash(string trackName)
+        {
+            var sourceList = TrackList.Values.Select(t => t.Name);
+            if (string.IsNullOrEmpty(trackName) || sourceList == null)
+                return 0;
+
+            var targetSet = new HashSet<char>(trackName);
+            int targetCharCount = targetSet.Count;
+
+            var scored = sourceList
+                .Where(s => !string.IsNullOrEmpty(s))
+                .Select(s => new
+                {
+                    Str = s,
+                    Same = s.Distinct().Count(c => targetSet.Contains(c)),
+                    Total = s.Distinct().Count()
+                })
+                .Select(x => new
+                {
+                    x.Str,
+                    // 相似度 = 相同字符数 / 双方字符数的较大值（更公平）
+                    Similarity = (double)x.Same / Math.Max(x.Total, targetCharCount)
+                })
+                .ToList();
+
+            if (!scored.Any()) return 0;
+
+            string name = scored.OrderByDescending(x => x.Similarity).First().Str;
+            return TrackList.Keys.FirstOrDefault(k => TrackList[k].Name == name);
+        }
+
         public static uint GetRandomTrack(string Nickname, byte GameType, uint Track, bool ai = false)
         {
             string RandomTrackGameType = "speed";

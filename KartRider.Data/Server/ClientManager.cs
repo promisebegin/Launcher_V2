@@ -62,7 +62,7 @@ public static class ClientManager
             int slotId = RoomManager.GetPlayerSlotId(roomId, ClientGroup.Nickname);
             if (slotId != -1)
             {
-                RoomManager.RemovePlayer(roomId, (byte)slotId);
+                RoomManager.RemovePlayer(roomId, (byte)slotId, ClientGroup.Nickname);
             }
             if (!string.IsNullOrEmpty(ClientGroup.Nickname))
             {

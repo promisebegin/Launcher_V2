@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Net.WebSockets;
 using KartLibrary.File;
+using Profile;
 
 namespace KartRider;
 
@@ -35,6 +36,9 @@ public class GameRoom
     // 8个格子（0-7）
     public RoomMember[] _slots = new RoomMember[8];
     public RoomMember[] _IDs = new RoomMember[8];
+
+    public RoomMember[] ObIDs = new RoomMember[8];
+    public int ObID = 8;
 
     // 构造函数：初始化房间ID（由外部传入唯一ID）
     public GameRoom(int roomId)
@@ -92,6 +96,8 @@ public class GameRoom
             return SlotStatus.Player;      // 玩家
         if (member is Ai)
             return SlotStatus.Ai;          // AI
+        if (member is Close)
+            return SlotStatus.Close;
         return SlotStatus.Empty;           // 理论上不会走到这里（基类不会直接实例化）
     }
 
@@ -109,7 +115,27 @@ public class GameRoom
     // 尝试添加玩家（成功后自动检查是否需要删除房间）
     public byte TryAddPlayer(string nickname, byte team, int playerType, SessionGroup client)
     {
-        if (team == 2)
+        uint pmap = ProfileService.ProfileConfigs[nickname].Rider.pmap;
+        if (pmap == 718 || pmap == 590)
+        {
+            for (byte i = 0; i < 8; i++)
+            {
+                if (ObIDs[i] == null)
+                {
+                    ObIDs[i] = new Player
+                    {
+                        ID = ObID++,
+                        SlotId = i,
+                        Nickname = nickname,
+                        PlayerType = 4,
+                        Session = client
+                    };
+                    return i;
+                }
+            }
+            return 255;
+        }
+        else if (team == 2)
         {
             for (byte i = 0; i < 4; i++)
             {
@@ -182,20 +208,50 @@ public class GameRoom
     }
 
     // 移除指定格子的成员（如果是玩家，需检查是否触发删除）
-    public bool RemoveMember(byte slotId, out bool shouldDeleteRoom)
+    public bool RemoveMember(byte slotId, string nickname, out bool shouldDeleteRoom)
     {
         shouldDeleteRoom = false;
         if (!IsValidSlotId(slotId))
             throw new ArgumentOutOfRangeException(nameof(slotId), "格子ID必须在0-7之间");
 
-        var removedMember = _slots[slotId];
+        if (!string.IsNullOrEmpty(nickname))
+        {
+            uint pmap = ProfileService.ProfileConfigs[nickname].Rider.pmap;
+            if (pmap == 718 || pmap == 590)
+            {
+                if (ObIDs[slotId] is Player p1)
+                {
+                    ObIDs[slotId] = null;
+                    shouldDeleteRoom = GetPlayerCount() == 0;
+                    if (!shouldDeleteRoom && p1.ID == RoomMaster)
+                    {
+                        foreach (RoomMember member in _IDs)
+                        {
+                            if (member is Player p2)
+                            {
+                                RoomMaster = p2.ID;
+                                p2.PlayerType = 2;
+                                break;
+                            }
+                        }
+                    }
+                    if (!shouldDeleteRoom) MultyPlayer.GrSlotDataPacket(RoomId);
+                    return true;
+                }
+            }
+        }
+
+        RoomMember removedMember = _slots[slotId];
         if (removedMember == null)
             return false; // 格子已为空
+
+        _slots[slotId] = null;
 
         if (removedMember is Player player)
         {
             _IDs[player.ID] = null;
-            if (player.ID == RoomMaster)
+            shouldDeleteRoom = GetPlayerCount() == 0;
+            if (!shouldDeleteRoom && player.ID == RoomMaster)
             {
                 foreach (RoomMember member in _IDs)
                 {
@@ -207,21 +263,17 @@ public class GameRoom
                     }
                 }
             }
+            if (!shouldDeleteRoom) MultyPlayer.GrSlotDataPacket(RoomId);
+            return true;
         }
         else if (removedMember is Ai ai)
         {
             _IDs[ai.ID] = null;
-        }
-        _slots[slotId] = null; // 清空格子
-
-        // 如果移除的是玩家，检查剩余玩家数量
-        if (removedMember is Player)
-        {
-            shouldDeleteRoom = GetPlayerCount() == 0;
+            if (!shouldDeleteRoom) MultyPlayer.GrSlotDataPacket(RoomId);
+            return true;
         }
 
-        MultyPlayer.GrSlotDataPacket(RoomId);
-        return true;
+        return false;
     }
 
     // 其他方法：设置AI、获取格子信息等（沿用之前的逻辑，略）

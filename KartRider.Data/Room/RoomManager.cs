@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using Profile;
 
 namespace KartRider;
 
@@ -46,13 +47,7 @@ public static class RoomManager
     }
 
     // 尝试向房间添加玩家
-    public static byte AddPlayer(
-        int roomId,
-        string nickname,
-        byte team,
-        int playerType,
-        SessionGroup client
-    )
+    public static byte AddPlayer(int roomId, string nickname, byte team, int playerType, SessionGroup client)
     {
         var room = GetRoom(roomId);
 
@@ -94,14 +89,31 @@ public static class RoomManager
             if (!_rooms.TryGetValue(roomId, out var room))
                 return -1;
 
-            // 2. 遍历房间所有格子，查找目标玩家
-            foreach (var member in room._slots)
+            uint pmap = Profile.ProfileService.ProfileConfigs[nickname].Rider.pmap;
+            if (pmap == 718 || pmap == 590)
             {
-                // 匹配玩家类型且昵称一致
-                if (member is Player player && player.Nickname == nickname)
+                foreach (var member in room.ObIDs)
                 {
-                    return player.SlotId; // 返回玩家所在的格子ID
+                    // 匹配玩家类型且昵称一致
+                    if (member is Player player && player.Nickname == nickname)
+                    {
+                        return player.SlotId; // 返回玩家所在的格子ID
+                    }
                 }
+                return -1;
+            }
+            else
+            {
+                // 2. 遍历房间所有格子，查找目标玩家
+                foreach (var member in room._slots)
+                {
+                    // 匹配玩家类型且昵称一致
+                    if (member is Player player && player.Nickname == nickname)
+                    {
+                        return player.SlotId; // 返回玩家所在的格子ID
+                    }
+                }
+                return -1;
             }
         }
         // 未找到玩家（或玩家不在该房间）
@@ -119,21 +131,18 @@ public static class RoomManager
     }
 
     // 从房间移除成员（如果是玩家且移除后无玩家，则删除房间）
-    public static bool RemovePlayer(int roomId, byte slotId)
+    public static bool RemovePlayer(int roomId, byte slotId, string nickname)
     {
         var room = GetRoom(roomId);
         if (room == null)
             return false;
 
-        var member = room.GetSlotMember(slotId);
-        string originalNick = (member as Player)?.Nickname;
-
-        bool removed = room.RemoveMember(slotId, out bool shouldDeleteRoom);
+        bool removed = room.RemoveMember(slotId, nickname, out bool shouldDeleteRoom);
         if (removed)
         {
-            if (!string.IsNullOrEmpty(originalNick))
+            if (!string.IsNullOrEmpty(nickname))
             {
-                _playerRoomMap.Remove(originalNick); // 区分大小写删除
+                _playerRoomMap.Remove(nickname); // 区分大小写删除
             }
             if (shouldDeleteRoom)
             {
@@ -209,15 +218,31 @@ public static class RoomManager
             // 1. 先检查房间是否存在
             if (!_rooms.TryGetValue(roomId, out var room))
                 return null;
-
-            // 2. 遍历房间的8个格子，查找昵称匹配的玩家
-            foreach (var member in room._slots)
+            uint pmap = ProfileService.ProfileConfigs[nickname].Rider.pmap;
+            if (pmap == 718 || pmap == 590)
             {
-                // 严格匹配昵称（含大小写）
-                if (member is Player player && player.Nickname == nickname)
+                foreach (var member in room.ObIDs)
                 {
-                    return player;
+                    // 严格匹配昵称（含大小写）
+                    if (member is Player player && player.Nickname == nickname)
+                    {
+                        return player;
+                    }
                 }
+                return null;
+            }
+            else
+            {
+                // 2. 遍历房间的8个格子，查找昵称匹配的玩家
+                foreach (var member in room._slots)
+                {
+                    // 严格匹配昵称（含大小写）
+                    if (member is Player player && player.Nickname == nickname)
+                    {
+                        return player;
+                    }
+                }
+                return null;
             }
         }
         return null; // 未找到玩家
