@@ -46,6 +46,17 @@ public class GameRoom
         RoomId = roomId; // 房间ID创建后固定不变
     }
 
+    public int GetOBCount()
+    {
+        int count = 0;
+        foreach (var member in ObIDs)
+        {
+            if (member is Player) // 仅统计玩家类型
+                count++;
+        }
+        return count;
+    }
+
     // 统计当前房间内的玩家数量（不包含AI）
     public int GetPlayerCount(byte team = 0)
     {
@@ -79,6 +90,11 @@ public class GameRoom
         foreach (var member in _slots)
         {
             if (member is Player || member is Ai)
+                count++;
+        }
+        foreach (var member in ObIDs)
+        {
+            if (member is Player) // 仅统计玩家类型
                 count++;
         }
         return count;
@@ -222,7 +238,7 @@ public class GameRoom
                 if (ObIDs[slotId] is Player p1)
                 {
                     ObIDs[slotId] = null;
-                    shouldDeleteRoom = GetPlayerCount() == 0;
+                    shouldDeleteRoom = (GetPlayerCount() + GetOBCount()) == 0;
                     if (!shouldDeleteRoom && p1.ID == RoomMaster)
                     {
                         foreach (RoomMember member in _IDs)
@@ -250,7 +266,7 @@ public class GameRoom
         if (removedMember is Player player)
         {
             _IDs[player.ID] = null;
-            shouldDeleteRoom = GetPlayerCount() == 0;
+            shouldDeleteRoom = (GetPlayerCount() + GetOBCount()) == 0;
             if (!shouldDeleteRoom && player.ID == RoomMaster)
             {
                 foreach (RoomMember member in _IDs)
