@@ -59,9 +59,11 @@ namespace KartRider
                 .Select(x => new
                 {
                     x.Str,
+                    x.Same,
                     // 相似度 = 相同字符数 / 双方字符数的较大值（更公平）
                     Similarity = (double)x.Same / Math.Max(x.Total, targetCharCount)
                 })
+                .Where(x => x.Same >= 2) // 至少完全匹配两个字符
                 .ToList();
 
             if (!scored.Any()) return 0;

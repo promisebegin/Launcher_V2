@@ -92,11 +92,6 @@ public class GameRoom
             if (member is Player || member is Ai)
                 count++;
         }
-        foreach (var member in ObIDs)
-        {
-            if (member is Player) // 仅统计玩家类型
-                count++;
-        }
         return count;
     }
 

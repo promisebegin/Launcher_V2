@@ -83,8 +83,17 @@ public static class MultyPlayer
             Console.WriteLine($"房间 {roomId} 不存在");
             return;
         }
+
         Ready = new Dictionary<string, bool>();
+
         foreach (var player in room._slots)
+        {
+            if (player is Player p && !string.IsNullOrEmpty(p.Nickname))
+            {
+                Ready[p.Nickname] = false;
+            }
+        }
+        foreach (var player in room.ObIDs)
         {
             if (player is Player p && !string.IsNullOrEmpty(p.Nickname))
             {
@@ -181,17 +190,22 @@ public static class MultyPlayer
         Console.WriteLine("StartTicks = {0}", room.StartTicks);
     }
 
-    static void Set_settleTrigger(SessionGroup Parent, int roomId)
+    static void Set_settleTrigger(SessionGroup Parent)
     {
         var onceTimer = new System.Timers.Timer();
         onceTimer.Interval = 10000;
-        onceTimer.Elapsed += new System.Timers.ElapsedEventHandler((s, _event) => settleTrigger(Parent, roomId, s, _event));
+        onceTimer.Elapsed += new System.Timers.ElapsedEventHandler((s, _event) => settleTrigger(Parent, s, _event));
         onceTimer.AutoReset = false;
         onceTimer.Start();
     }
 
-    static void settleTrigger(SessionGroup Parent, int roomId, object sender, System.Timers.ElapsedEventArgs e)
+    static void settleTrigger(SessionGroup Parent, object sender, System.Timers.ElapsedEventArgs e)
     {
+        var roomId = RoomManager.TryGetRoomId(Parent.Nickname);
+        if (roomId == -1)
+        {
+            return;
+        }
         var room = RoomManager.GetRoom(roomId);
         if (room == null)
         {
@@ -402,6 +416,11 @@ public static class MultyPlayer
             room.RoomMaster = firstID;
             p4.PlayerType = 2;
         }
+        else if (room.GetOBCount() < 1 && RoomManager.TryGetIdDetail(roomId, firstID) is Player p5)
+        {
+            room.RoomMaster = firstID;
+            p5.PlayerType = 2;
+        }
         Console.WriteLine("EndTicks = {0}", room.EndTicks + 5000);
     }
 
@@ -468,7 +487,7 @@ public static class MultyPlayer
                         oPacket.WriteUInt(room.EndTicks);
                         BroadCast(roomId, oPacket, Parent.Nickname);
                     }
-                    Set_settleTrigger(Parent, roomId);
+                    Set_settleTrigger(Parent);
                 }
             }
             return;
@@ -654,6 +673,11 @@ public static class MultyPlayer
                     return;
                 }
                 Room.RoomMaster = player.ID;
+                uint pmap = ProfileService.ProfileConfigs[Parent.Nickname].Rider.pmap;
+                if (pmap == 590)
+                {
+                    Room.RoomMaster = 0;
+                }
                 using (OutPacket oPacket = new OutPacket("ChCreateRoomReplyPacket"))
                 {
                     oPacket.WriteByte(1);
@@ -814,86 +838,7 @@ public static class MultyPlayer
         }
         else if (hash == Adler32Helper.GenerateAdler32_ASCII("GrRequestStartPacket"))
         {
-            int roomId = RoomManager.TryGetRoomId(Parent.Nickname);
-            var room = RoomManager.GetRoom(roomId);
-            if (room == null)
-            {
-                return;
-            }
-
-            int readyCount = 0;
-            foreach (RoomMember member in room._IDs)
-            {
-                if (member is Player player)
-                {
-                    if (player.PlayerType == 3 || player.ID == room.RoomMaster)
-                    {
-                        readyCount++;
-                        continue;
-                    }
-                }
-            }
-
-            int playerCount = room.GetPlayerCount();
-            if (readyCount < playerCount || playerCount < 1)
-            {
-                using (OutPacket oPacket = new OutPacket("GrReplyStartPacket"))
-                {
-                    oPacket.WriteInt(2);
-                    Parent.Client.Send(oPacket);
-                }
-                return;
-            }
-
-            room.Started = true;
-
-            if (room.track < 100)
-            {
-                if (room.trackList.Count > 30)
-                {
-                    room.trackList.Clear();
-                }
-
-                uint track;
-
-                do
-                {
-                    bool ai = false;
-                    if (room.GetAiCount() > 0)
-                    {
-                        ai = true;
-                    }
-                    track = RandomTrack.GetRandomTrack(Parent.Nickname, room.RandomTrackGameType, room.track, ai);
-                } while (room.trackList.Contains(track));
-                room.trackList.Add(track);
-                room.trackTemp = track;
-            }
-            else
-            {
-                room.trackTemp = room.track;
-            }
-
-            using (OutPacket oPacket = new OutPacket("GrReplyStartPacket"))
-            {
-                oPacket.WriteInt(0);
-                Parent.Client.Send(oPacket);
-            }
-
-            foreach (RoomMember member in room.ObIDs)
-            {
-                if (member is Player p)
-                {
-                    GrCommandStartPacket(roomId, p);
-                }
-            }
-
-            foreach (RoomMember member in room._IDs)
-            {
-                if (member is Player p)
-                {
-                    GrCommandStartPacket(roomId, p);
-                }
-            }
+            GrSessionDataPacket(Parent);
             return;
         }
         else if (hash == Adler32Helper.GenerateAdler32_ASCII("PcReportStateInGame", 0))
@@ -987,7 +932,7 @@ public static class MultyPlayer
                     oPacket.WriteUInt(room.EndTicks);
                     BroadCast(roomId, oPacket);
                 }
-                Set_settleTrigger(Parent, roomId);
+                Set_settleTrigger(Parent);
             }
             return;
         }
@@ -1124,8 +1069,7 @@ public static class MultyPlayer
                 else if (room.GameType == 3 || room.GameType == 4)
                 {
                     uint pmap = ProfileService.ProfileConfigs[Parent.Nickname].Rider.pmap;
-                    
-                    if (pmap == 718 || playerCount < 1)
+                    if (pmap == 718 || (playerCount < 1 && room.RoomMaster < 8))
                     {
                         room.RoomMaster = player.ID;
                     }
@@ -1174,7 +1118,7 @@ public static class MultyPlayer
                 else
                 {
                     uint pmap = ProfileService.ProfileConfigs[Parent.Nickname].Rider.pmap;
-                    if (pmap == 718 || playerCount < 1)
+                    if (pmap == 718 || (playerCount < 1 && room.RoomMaster < 8))
                     {
                         room.RoomMaster = player.ID;
                     }
@@ -1195,19 +1139,17 @@ public static class MultyPlayer
         {
             string value = iPacket.ReadString();
             int roomId = RoomManager.TryGetRoomId(Parent.Nickname);
-            Console.WriteLine("GrSlotDataPacket, roomId = {0}", roomId);
+            if (roomId == -1)
+            {
+                return;
+            }
             var room = RoomManager.GetRoom(roomId);
             if (room == null)
             {
                 Console.WriteLine("GetRoom Failed, roomId = {0}", roomId);
                 return;
             }
-            uint track = RandomTrack.GetHash(value);
-            if (track != 0)
-            {
-                room.track = track;
-                GrSlotDataPacket(roomId);
-            }
+
             var player = RoomManager.GetPlayer(roomId, Parent.Nickname);
             if (player == null)
             {
@@ -1227,6 +1169,48 @@ public static class MultyPlayer
                             p.Session.Client.Send(outPacket);
                         }
                     }
+                }
+            }
+
+            uint pmap = ProfileService.ProfileConfigs[Parent.Nickname].Rider.pmap;
+            if (pmap == 718 || pmap == 590)
+            {
+                if (value.StartsWith("选图", StringComparison.OrdinalIgnoreCase) || value.StartsWith("换图", StringComparison.OrdinalIgnoreCase) || value.StartsWith("選圖", StringComparison.OrdinalIgnoreCase) || value.StartsWith("換圖", StringComparison.OrdinalIgnoreCase))
+                {
+                    uint track = RandomTrack.GetHash(value);
+                    if (track != 0)
+                    {
+                        room.track = track;
+                        GrSlotDataPacket(roomId);
+                    }
+                    return;
+                }
+                else if (value.StartsWith("开始游戏", StringComparison.OrdinalIgnoreCase) || value.StartsWith("開始遊戲", StringComparison.OrdinalIgnoreCase))
+                {
+                    GrSessionDataPacket(Parent);
+                    return;
+                }
+                else if (value.StartsWith("结束游戏", StringComparison.OrdinalIgnoreCase) || value.StartsWith("結束遊戲", StringComparison.OrdinalIgnoreCase))
+                {
+                    using (OutPacket outPacket = new OutPacket("GameResultPacket"))
+                    {
+                        outPacket.WriteByte(0);
+                        outPacket.WriteInt(0); // player count
+                        outPacket.WriteInt(0); // AI count
+                        outPacket.WriteBytes(new byte[34]);
+                        outPacket.WriteHexString("FF FF FF FF 00 00 00 00 00");
+                        BroadCast(roomId, outPacket);
+                    }
+                    using (OutPacket outPacket = new OutPacket("GameControlPacket"))
+                    {
+                        outPacket.WriteInt(4);
+                        outPacket.WriteByte(0);
+                        outPacket.WriteUInt(ConvertTick());
+                        BroadCast(roomId, outPacket);
+                    }
+                    room.Started = false;
+                    room.StartTicks = 0;
+                    return;
                 }
             }
             return;
@@ -1618,6 +1602,90 @@ public static class MultyPlayer
         }
 
         Position(roomId, outPacket);
+    }
+
+    static void GrSessionDataPacket(SessionGroup Parent)
+    {
+        int roomId = RoomManager.TryGetRoomId(Parent.Nickname);
+        var room = RoomManager.GetRoom(roomId);
+        if (room == null)
+        {
+            return;
+        }
+
+        int readyCount = 0;
+        foreach (RoomMember member in room._IDs)
+        {
+            if (member is Player player)
+            {
+                if (player.PlayerType == 3 || player.ID == room.RoomMaster)
+                {
+                    readyCount++;
+                    continue;
+                }
+            }
+        }
+
+        int playerCount = room.GetPlayerCount();
+        if (readyCount < playerCount || playerCount < 1)
+        {
+            using (OutPacket oPacket = new OutPacket("GrReplyStartPacket"))
+            {
+                oPacket.WriteInt(2);
+                Parent.Client.Send(oPacket);
+            }
+            return;
+        }
+
+        room.Started = true;
+
+        if (room.track < 100)
+        {
+            if (room.trackList.Count > 30)
+            {
+                room.trackList.Clear();
+            }
+
+            uint track;
+
+            do
+            {
+                bool ai = false;
+                if (room.GetAiCount() > 0)
+                {
+                    ai = true;
+                }
+                track = RandomTrack.GetRandomTrack(Parent.Nickname, room.RandomTrackGameType, room.track, ai);
+            } while (room.trackList.Contains(track));
+            room.trackList.Add(track);
+            room.trackTemp = track;
+        }
+        else
+        {
+            room.trackTemp = room.track;
+        }
+
+        using (OutPacket oPacket = new OutPacket("GrReplyStartPacket"))
+        {
+            oPacket.WriteInt(0);
+            Parent.Client.Send(oPacket);
+        }
+
+        foreach (RoomMember member in room.ObIDs)
+        {
+            if (member is Player p)
+            {
+                GrCommandStartPacket(roomId, p);
+            }
+        }
+
+        foreach (RoomMember member in room._IDs)
+        {
+            if (member is Player p)
+            {
+                GrCommandStartPacket(roomId, p);
+            }
+        }
     }
 
     static void GrCommandStartPacket(int roomId, Player p)
