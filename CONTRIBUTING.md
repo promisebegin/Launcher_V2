@@ -19,11 +19,11 @@ Sincere thanks to the authors of the above repositories for their excellent work
 
 可贡献类型
 
-- 修复基于 Launcher.cn_3075 原始代码衍生的 Bug（如启动、文件解析异常）
+- 修复基于 [Launcher.cn_3075](https://github.com/MyPuppy/Launcher.cn_3075) 原始代码衍生的 Bug（如启动、文件解析异常）
 
 - 新增跑跑卡丁车文件格式支持（Rho、Rho5、XML等）及车辆数据相关功能
 
-- 优化车辆数据解析、转换逻辑（参考 kart_data_Transform 实现，提升准确性和效率）
+- 优化车辆数据解析、转换逻辑（参考 [kart_data_Transform](https://github.com/lkk9898969/kart_data_Transform) 实现，提升准确性和效率）
 
 - 完善项目文档、使用说明、注释，优化代码可读性
 
@@ -59,7 +59,7 @@ Sincere thanks to the authors of the above repositories for their excellent work
 
 - 描述预期的输入、输出效果，可附上参考示例或截图
 
-- 若涉及车辆数据相关功能，可参考 kart_data_Transform 的实现思路并提出优化建议
+- 若涉及车辆数据相关功能，可参考 [kart_data_Transform](https://github.com/lkk9898969/kart_data_Transform) 的实现思路并提出优化建议
 
 🔒 安全问题
 
@@ -141,7 +141,7 @@ PR 提交要求
 
 测试要求
 
-- 修改基于 Launcher.cn_3075 的核心代码后，需验证原始功能正常运行
+- 修改基于 [Launcher.cn_3075](https://github.com/MyPuppy/Launcher.cn_3075) 的核心代码后，需验证原始功能正常运行
 
 - 修改车辆数据解析、转换逻辑后，需验证原有车辆数据可正常解析，新增功能符合预期
 
