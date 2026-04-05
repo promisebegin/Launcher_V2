@@ -3630,7 +3630,7 @@ namespace KartRider
                             foreach(var User in ClientManager.UserNOToNickname.Where(u => u.Value != this.Parent.Nickname))
                             {
                                 outPacket.WriteUInt(User.Key);
-                                outPacket.WriteString(User.Value);
+                                outPacket.WriteString(User.Value + $"[{ProfileService.ProfileConfigs[this.Parent.Nickname].Rider.ClientId}]");
                                 outPacket.WriteUInt(ProfileService.ProfileConfigs[User.Value].Rider.RP);
                                 outPacket.WriteHexString("00 00 00 00 00 00");
                                 if (ClientManager.ClientGroups.Any(cg => cg.Value.Nickname == User.Value))
@@ -3658,7 +3658,7 @@ namespace KartRider
                             foreach (var User in ClientManager.UserNOToNickname.Where(u => u.Value != this.Parent.Nickname))
                             {
                                 outPacket.WriteUInt(User.Key);
-                                outPacket.WriteString(User.Value);
+                                outPacket.WriteString(User.Value + $"[{ProfileService.ProfileConfigs[this.Parent.Nickname].Rider.ClientId}]");
                                 outPacket.WriteUInt(ProfileService.ProfileConfigs[User.Value].Rider.RP);
                                 outPacket.WriteHexString("00 00 00 00 00 00");
                                 if (ClientManager.ClientGroups.Any(cg => cg.Value.Nickname == User.Value))
@@ -3782,6 +3782,18 @@ namespace KartRider
                         {
                             GameSupport.PrQuestUX2ndPacket(outPacket);
                             this.Parent.Client.Send(outPacket);
+                        }
+                        return;
+                    }
+                    else if (hash == Adler32Helper.GenerateAdler32_ASCII("LoPingRequestPacket", 0))
+                    {
+                        foreach (var client in ClientManager._clientSessions.Values)
+                        {
+                            using (OutPacket outPacket = new OutPacket("PrServerTime"))
+                            {
+                                outPacket.WriteDateTime(DateTime.Now);
+                                client.Client.Send(outPacket);
+                            }
                         }
                         return;
                     }
