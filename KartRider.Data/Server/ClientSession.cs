@@ -85,11 +85,25 @@ namespace KartRider
                     FileName.Load(packet.Nickname);
                     uint UserNO = ClientManager.GetUserNO(packet.Nickname);
                     ProfileService.ProfileConfigs[packet.Nickname].Rider.ClientId = clientId;
-                    if (packet.Nickname.Length > 1 && packet.Nickname.StartsWith("ob", StringComparison.OrdinalIgnoreCase))
+                    if (packet.Nickname.Length > 1 && packet.Nickname.StartsWith("sob", StringComparison.OrdinalIgnoreCase))
+                    {
+                        if (ProfileService.ProfileConfigs[packet.Nickname].Rider.pmap == 0)
+                        {
+                            ProfileService.ProfileConfigs[packet.Nickname].Rider.pmap = 718;
+                        }
+                    }
+                    else if (packet.Nickname.Length > 1 && packet.Nickname.StartsWith("ob", StringComparison.OrdinalIgnoreCase))
                     {
                         if (ProfileService.ProfileConfigs[packet.Nickname].Rider.pmap == 0)
                         {
                             ProfileService.ProfileConfigs[packet.Nickname].Rider.pmap = 590;
+                        }
+                    }
+                    else if (packet.Nickname.Length > 1 && packet.Nickname.StartsWith("ca", StringComparison.OrdinalIgnoreCase))
+                    {
+                        if (ProfileService.ProfileConfigs[packet.Nickname].Rider.pmap == 0)
+                        {
+                            ProfileService.ProfileConfigs[packet.Nickname].Rider.pmap = 1068;
                         }
                     }
                     ProfileService.Save(packet.Nickname);
@@ -2762,7 +2776,7 @@ namespace KartRider
 
                         using (OutPacket outPacket = new OutPacket("PrLogin"))
                         {
-                            outPacket.WriteInt(ProfileService.ProfileConfigs[this.Parent.Nickname].Rider.BanType); // 1:ID已登录 2:账号封停 3:非加盟网吧 4:ID错误 5:禁止IP登录 6:ID不正确
+                            outPacket.WriteInt(ProfileService.ProfileConfigs[this.Parent.Nickname].Rider.BanType);
                             outPacket.WriteDateTime(DateTime.Now);
                             outPacket.WriteUInt(ClientManager.GetUserNO(this.Parent.Nickname));
                             outPacket.WriteString(this.Parent.Nickname); // UserID
@@ -3630,7 +3644,7 @@ namespace KartRider
                             foreach(var User in ClientManager.UserNOToNickname.Where(u => u.Value != this.Parent.Nickname))
                             {
                                 outPacket.WriteUInt(User.Key);
-                                outPacket.WriteString(User.Value + $"[{ProfileService.ProfileConfigs[this.Parent.Nickname].Rider.ClientId}]");
+                                outPacket.WriteString(User.Value + $"[{ProfileService.ProfileConfigs[User.Value].Rider.ClientId}]");
                                 outPacket.WriteUInt(ProfileService.ProfileConfigs[User.Value].Rider.RP);
                                 outPacket.WriteHexString("00 00 00 00 00 00");
                                 if (ClientManager.ClientGroups.Any(cg => cg.Value.Nickname == User.Value))
@@ -3658,7 +3672,7 @@ namespace KartRider
                             foreach (var User in ClientManager.UserNOToNickname.Where(u => u.Value != this.Parent.Nickname))
                             {
                                 outPacket.WriteUInt(User.Key);
-                                outPacket.WriteString(User.Value + $"[{ProfileService.ProfileConfigs[this.Parent.Nickname].Rider.ClientId}]");
+                                outPacket.WriteString(User.Value + $"[{ProfileService.ProfileConfigs[User.Value].Rider.ClientId}]");
                                 outPacket.WriteUInt(ProfileService.ProfileConfigs[User.Value].Rider.RP);
                                 outPacket.WriteHexString("00 00 00 00 00 00");
                                 if (ClientManager.ClientGroups.Any(cg => cg.Value.Nickname == User.Value))
