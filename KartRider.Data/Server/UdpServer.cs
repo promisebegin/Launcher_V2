@@ -280,7 +280,7 @@ namespace KartRider
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[{_serverName}] 处理数据异常：{ex.Message}");
+                    Console.WriteLine($"[{_serverName}{clientEP.Address}:{clientEP.Port}] 处理数据异常：{ex.Message}");
                 }
             }
             catch (ObjectDisposedException)
@@ -289,11 +289,11 @@ namespace KartRider
             }
             catch (SocketException ex)
             {
-                Console.WriteLine($"[{_serverName}] 处理数据异常：{ex.Message}，错误码：{ex.SocketErrorCode}");
+                Console.WriteLine($"[{_serverName}{clientEP.Address}:{clientEP.Port}] 处理数据异常：{ex.Message}，错误码：{ex.SocketErrorCode}");
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[{_serverName}] 处理数据异常：{ex.Message}");
+                Console.WriteLine($"[{_serverName}{clientEP.Address}:{clientEP.Port}] 处理数据异常：{ex.Message}");
             }
             finally
             {
