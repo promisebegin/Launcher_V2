@@ -14,6 +14,7 @@ using System.Xml;
 using System.Xml.Linq;
 using System.Security;
 using System.Data.Common;
+using System.Windows.Forms;
 
 namespace KartRider;
 
@@ -1010,129 +1011,8 @@ public static class MultyPlayer
 
             var room = RoomManager.GetRoom(roomId);
             Console.WriteLine("ChJoinRoomRequestPacket, roomId = {0}, Started = {1}", roomId, room.Started);
-            if (room == null)
-            {
-                using (OutPacket outPacket = new OutPacket("ChJoinRoomReplyPacket"))
-                {
-                    outPacket.WriteByte(1);
-                    outPacket.WriteByte(0);
-                    outPacket.WriteByte(0);
-                    outPacket.WriteEncByte(0);
-                    outPacket.WriteBytes(new byte[5]);
-                    Parent.Client.Send(outPacket);
-                }
-                return;
-            }
-            else if (room.Started)
-            {
-                using (OutPacket outPacket = new OutPacket("ChJoinRoomReplyPacket"))
-                {
-                    outPacket.WriteByte(1);
-                    outPacket.WriteByte(0);
-                    outPacket.WriteByte(0);
-                    outPacket.WriteEncByte(0);
-                    outPacket.WriteBytes(new byte[5]);
-                    Parent.Client.Send(outPacket);
-                }
-                return;
-            }
-            else if (pwd != room.LockPwd)
-            {
-                using (OutPacket outPacket = new OutPacket("ChJoinRoomReplyPacket"))
-                {
-                    outPacket.WriteByte(2);
-                    outPacket.WriteByte(0);
-                    outPacket.WriteByte(0);
-                    outPacket.WriteEncByte(room.GameType);
-                    outPacket.WriteBytes(new byte[5]);
-                    Parent.Client.Send(outPacket);
-                }
-            }
-            else
-            {
-                int playerCount = room.GetPlayerCount();
-                byte slot = RoomManager.AddPlayer(roomId, Parent.Nickname, 0, 2, Parent);
-                Player player = RoomManager.GetPlayer(roomId, Parent.Nickname);
-                if (slot == 255 || player == null)
-                {
-                    using (OutPacket outPacket = new OutPacket("ChJoinRoomReplyPacket"))
-                    {
-                        outPacket.WriteByte(1);
-                        outPacket.WriteByte(0);
-                        outPacket.WriteByte(0);
-                        outPacket.WriteEncByte(room.GameType);
-                        outPacket.WriteBytes(new byte[5]);
-                        Parent.Client.Send(outPacket);
-                    }
-                    return;
-                }
-                else if (room.GameType == 3 || room.GameType == 4)
-                {
-                    uint pmap = ProfileService.ProfileConfigs[Parent.Nickname].Rider.pmap;
-                    if (pmap == 718 || (playerCount < 1 && room.RoomMaster < 8))
-                    {
-                        room.RoomMaster = player.ID;
-                    }
-                    if (slot < 4)
-                    {
-                        player.Team = 2;
-                        using (OutPacket outPacket = new OutPacket("ChJoinRoomReplyPacket"))
-                        {
-                            outPacket.WriteByte(0);
-                            outPacket.WriteByte(1);
-                            outPacket.WriteByte(2);
-                            outPacket.WriteEncByte(room.GameType);
-                            outPacket.WriteBytes(new byte[5]);
-                            Parent.Client.Send(outPacket);
-                        }
-                        return;
-                    }
-                    else if (slot > 3 && slot < 8)
-                    {
-                        player.Team = 1;
-                        using (OutPacket outPacket = new OutPacket("ChJoinRoomReplyPacket"))
-                        {
-                            outPacket.WriteByte(0);
-                            outPacket.WriteByte(1);
-                            outPacket.WriteByte(2);
-                            outPacket.WriteEncByte(room.GameType);
-                            outPacket.WriteBytes(new byte[5]);
-                            Parent.Client.Send(outPacket);
-                        }
-                        return;
-                    }
-                    else
-                    {
-                        using (OutPacket outPacket = new OutPacket("ChJoinRoomReplyPacket"))
-                        {
-                            outPacket.WriteByte(1);
-                            outPacket.WriteByte(0);
-                            outPacket.WriteByte(0);
-                            outPacket.WriteEncByte(room.GameType);
-                            outPacket.WriteBytes(new byte[5]);
-                            Parent.Client.Send(outPacket);
-                        }
-                        return;
-                    }
-                }
-                else
-                {
-                    uint pmap = ProfileService.ProfileConfigs[Parent.Nickname].Rider.pmap;
-                    if (pmap == 718 || (playerCount < 1 && room.RoomMaster < 8))
-                    {
-                        room.RoomMaster = player.ID;
-                    }
-                    using (OutPacket outPacket = new OutPacket("ChJoinRoomReplyPacket"))
-                    {
-                        outPacket.WriteByte(0);
-                        outPacket.WriteByte(1);
-                        outPacket.WriteByte(8);
-                        outPacket.WriteEncByte(room.GameType);
-                        outPacket.WriteBytes(new byte[5]);
-                        Parent.Client.Send(outPacket);
-                    }
-                }
-            }
+
+            ChJoinRoomReplyPacket(Parent, roomId, pwd);
             return;
         }
         else if (hash == Adler32Helper.GenerateAdler32_ASCII("GrRiderTalkPacket"))
@@ -1236,10 +1116,20 @@ public static class MultyPlayer
         }
         else if (hash == Adler32Helper.GenerateAdler32_ASCII("PcStartMatching") || hash == Adler32Helper.GenerateAdler32_ASCII("PcCancelMatching"))
         {
-            using (OutPacket outPacket = new OutPacket("PcMatchingFound"))
+            var roomList = RoomManager._rooms.Values.Where(r => !r.Lock).ToList();
+            if (roomList.Count > 0)
             {
-                outPacket.WriteInt(0);
-                Parent.Client.Send(outPacket);
+                Random random = new Random();
+                GameRoom room = roomList[random.Next(roomList.Count)];
+                ChJoinRoomReplyPacket(Parent, room.RoomId, "");
+            }
+            else
+            {
+                using (OutPacket outPacket = new OutPacket("PcMatchingFound"))
+                {
+                    outPacket.WriteInt(0);
+                    Parent.Client.Send(outPacket);
+                }
             }
             return;
         }
@@ -1754,6 +1644,145 @@ public static class MultyPlayer
         outPacket.WriteByte(0);
         outPacket.WriteInt(0);
         outPacket.WriteBytes(new byte[7]);
+    }
+
+    static void ChJoinRoomReplyPacket(SessionGroup Parent, int roomId, String pwd)
+    {
+        if (roomId == -1)
+        {
+            using (OutPacket outPacket = new OutPacket("ChJoinRoomReplyPacket"))
+            {
+                outPacket.WriteByte(1);
+                outPacket.WriteByte(0);
+                outPacket.WriteByte(0);
+                outPacket.WriteEncByte(0);
+                outPacket.WriteBytes(new byte[5]);
+                Parent.Client.Send(outPacket);
+            }
+            return;
+        }
+        var room = RoomManager.GetRoom(roomId);
+        if (room == null)
+        {
+            using (OutPacket outPacket = new OutPacket("ChJoinRoomReplyPacket"))
+            {
+                outPacket.WriteByte(1);
+                outPacket.WriteByte(0);
+                outPacket.WriteByte(0);
+                outPacket.WriteEncByte(room.GameType);
+                outPacket.WriteBytes(new byte[5]);
+                Parent.Client.Send(outPacket);
+            }
+            return;
+        }
+        else if (room.Started)
+        {
+            using (OutPacket outPacket = new OutPacket("ChJoinRoomReplyPacket"))
+            {
+                outPacket.WriteByte(1);
+                outPacket.WriteByte(0);
+                outPacket.WriteByte(0);
+                outPacket.WriteEncByte(0);
+                outPacket.WriteBytes(new byte[5]);
+                Parent.Client.Send(outPacket);
+            }
+            return;
+        }
+        else if (!string.IsNullOrEmpty(room.LockPwd) && pwd != room.LockPwd)
+        {
+            using (OutPacket outPacket = new OutPacket("ChJoinRoomReplyPacket"))
+            {
+                outPacket.WriteByte(2);
+                outPacket.WriteByte(0);
+                outPacket.WriteByte(0);
+                outPacket.WriteEncByte(room.GameType);
+                outPacket.WriteBytes(new byte[5]);
+                Parent.Client.Send(outPacket);
+            }
+        }
+
+        int playerCount = room.GetPlayerCount();
+        byte slot = RoomManager.AddPlayer(roomId, Parent.Nickname, 0, 2, Parent);
+        Player player = RoomManager.GetPlayer(roomId, Parent.Nickname);
+        if (slot == 255 || player == null)
+        {
+            using (OutPacket outPacket = new OutPacket("ChJoinRoomReplyPacket"))
+            {
+                outPacket.WriteByte(1);
+                outPacket.WriteByte(0);
+                outPacket.WriteByte(0);
+                outPacket.WriteEncByte(room.GameType);
+                outPacket.WriteBytes(new byte[5]);
+                Parent.Client.Send(outPacket);
+            }
+            return;
+        }
+        else if (room.GameType == 3 || room.GameType == 4)
+        {
+            uint pmap = ProfileService.ProfileConfigs[Parent.Nickname].Rider.pmap;
+            if (pmap == 718 || (playerCount < 1 && room.RoomMaster < 8))
+            {
+                room.RoomMaster = player.ID;
+            }
+            if (slot < 4)
+            {
+                player.Team = 2;
+                using (OutPacket outPacket = new OutPacket("ChJoinRoomReplyPacket"))
+                {
+                    outPacket.WriteByte(0);
+                    outPacket.WriteByte(1);
+                    outPacket.WriteByte(2);
+                    outPacket.WriteEncByte(room.GameType);
+                    outPacket.WriteBytes(new byte[5]);
+                    Parent.Client.Send(outPacket);
+                }
+                return;
+            }
+            else if (slot > 3 && slot < 8)
+            {
+                player.Team = 1;
+                using (OutPacket outPacket = new OutPacket("ChJoinRoomReplyPacket"))
+                {
+                    outPacket.WriteByte(0);
+                    outPacket.WriteByte(1);
+                    outPacket.WriteByte(2);
+                    outPacket.WriteEncByte(room.GameType);
+                    outPacket.WriteBytes(new byte[5]);
+                    Parent.Client.Send(outPacket);
+                }
+                return;
+            }
+            else
+            {
+                using (OutPacket outPacket = new OutPacket("ChJoinRoomReplyPacket"))
+                {
+                    outPacket.WriteByte(1);
+                    outPacket.WriteByte(0);
+                    outPacket.WriteByte(0);
+                    outPacket.WriteEncByte(room.GameType);
+                    outPacket.WriteBytes(new byte[5]);
+                    Parent.Client.Send(outPacket);
+                }
+                return;
+            }
+        }
+        else
+        {
+            uint pmap = ProfileService.ProfileConfigs[Parent.Nickname].Rider.pmap;
+            if (pmap == 718 || (playerCount < 1 && room.RoomMaster < 8))
+            {
+                room.RoomMaster = player.ID;
+            }
+            using (OutPacket outPacket = new OutPacket("ChJoinRoomReplyPacket"))
+            {
+                outPacket.WriteByte(0);
+                outPacket.WriteByte(1);
+                outPacket.WriteByte(8);
+                outPacket.WriteEncByte(room.GameType);
+                outPacket.WriteBytes(new byte[5]);
+                Parent.Client.Send(outPacket);
+            }
+        }
     }
 
     public static void BroadCast(int roomId, OutPacket outPacket, string Self = "", byte team = 0)
