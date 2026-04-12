@@ -53,7 +53,7 @@ namespace Profile
 
         public bool NgsOn { get; set; } = false;
 
-        public bool PatchUpdate { get; set; } = false;
+        public bool AutoUpdate { get; set; } = true;
 
         public bool EnableMod { get; set; } = false;
 
@@ -97,7 +97,7 @@ namespace Profile
 
         public int ClubCode { get; set; } = 10000;
 
-        public int ClubMark_LOGO { get; set; } = 2; //343 베로
+        public int ClubMark_LOGO { get; set; } = 0; //343 베로
 
         public int ClubMark_LINE { get; set; } = 0;
 

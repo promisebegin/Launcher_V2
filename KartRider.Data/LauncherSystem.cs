@@ -1,6 +1,7 @@
 using System;
 using System.Diagnostics;
 using System.IO;
+using System.Threading.Tasks;
 using System.Windows.Forms;
 using KartRider.IO.Packet;
 
@@ -25,30 +26,11 @@ namespace KartRider
 			Environment.Exit(1);
 		}
 
-		public static GameVersion GetGameVersion()
+		public static async Task CheckGameAsync(string kartRiderDirectory)
 		{
-			byte[] data = RouterListener.Connect();
 			string filePath = JsonHelper.GetFilePath();
-
+			var data = await Update.GetUpdateAsync();
 			if (data != null)
-			{
-				InPacket iPacket = new InPacket(data);
-				iPacket.ReadUInt();
-				iPacket.ReadUInt();
-				iPacket.ReadUShort();
-				iPacket.ReadUShort();
-				ushort version = iPacket.ReadUShort();
-				string updateUrl = iPacket.ReadString();
-				return new GameVersion { Version = version, UpdateUrl = updateUrl };
-			}
-			return null;
-		}
-
-		public static void CheckGame(string kartRiderDirectory)
-		{
-			string filePath = JsonHelper.GetFilePath();
-			GameVersion version = LauncherSystem.GetGameVersion();
-			if (version != null)
 			{
 				System.Diagnostics.Process[] process = System.Diagnostics.Process.GetProcessesByName("KartRider");
 				foreach (System.Diagnostics.Process p in process)
@@ -57,7 +39,7 @@ namespace KartRider
 				}
 				try
 				{
-					ProcessStartInfo startInfo = new ProcessStartInfo("Patcher.exe", $"'1' '123' '{version.UpdateUrl}/{version.Version}' '{kartRiderDirectory}' '{filePath}'")
+					ProcessStartInfo startInfo = new ProcessStartInfo("Patcher.exe", $"'1' '123' '{data.download_prefix}' '{kartRiderDirectory}' '{filePath}'")
 					{
 						WorkingDirectory = Path.GetFullPath(kartRiderDirectory),
 						UseShellExecute = true,
@@ -76,11 +58,5 @@ namespace KartRider
 				MessageBox.Show("获取游戏版本失败！", "错误", MessageBoxButtons.OK, MessageBoxIcon.Error);
 			}
 		}
-	}
-
-	public class GameVersion
-	{
-		public ushort Version { get; set; }
-		public string UpdateUrl { get; set; }
 	}
 }

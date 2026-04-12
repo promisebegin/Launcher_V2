@@ -23,7 +23,7 @@ namespace KartRider
             ProfileService.SettingConfig.ServerIP = ServerIP.Text;
             ProfileService.SettingConfig.ServerPort = ushort.Parse(ServerPort.Text);
             ProfileService.SettingConfig.NgsOn = NgsOn.Checked;
-            ProfileService.SettingConfig.PatchUpdate = PatchUpdate.Checked;
+            ProfileService.SettingConfig.AutoUpdate = AutoUpdate.Checked;
             ProfileService.SaveSettings();
         }
 
@@ -34,7 +34,7 @@ namespace KartRider
             ServerIP.Text = ProfileService.SettingConfig.ServerIP;
             ServerPort.Text = ProfileService.SettingConfig.ServerPort.ToString();
             NgsOn.Checked = ProfileService.SettingConfig.NgsOn;
-            PatchUpdate.Checked = ProfileService.SettingConfig.PatchUpdate;
+            AutoUpdate.Checked = ProfileService.SettingConfig.AutoUpdate;
             foreach (string key in SpeedType.speedNames[ProfileService.SettingConfig.Version].Keys)
             {
                 Speed_comboBox.Items.Add(key);
@@ -145,9 +145,8 @@ namespace KartRider
             ProfileService.SettingConfig.ServerIP = ServerIP.Text;
             ProfileService.SettingConfig.ServerPort = ushort.Parse(ServerPort.Text);
             ProfileService.SettingConfig.NgsOn = NgsOn.Checked;
-            ProfileService.SettingConfig.PatchUpdate = PatchUpdate.Checked;
+            ProfileService.SettingConfig.AutoUpdate = AutoUpdate.Checked;
             ProfileService.SaveSettings();
         }
     }
 }
-

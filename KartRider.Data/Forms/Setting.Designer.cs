@@ -23,7 +23,7 @@ namespace KartRider
             ServerPort = new TextBox();
             Port_label = new Label();
             NgsOn = new CheckBox();
-            PatchUpdate = new CheckBox();
+            AutoUpdate = new CheckBox();
             Save = new Button();
             SuspendLayout();
             // 
@@ -164,16 +164,16 @@ namespace KartRider
             NgsOn.Text = "NgsOn";
             NgsOn.UseVisualStyleBackColor = true;
             // 
-            // PatchUpdate
+            // AutoUpdate
             // 
-            PatchUpdate.AutoSize = true;
-            PatchUpdate.ForeColor = System.Drawing.Color.Blue;
-            PatchUpdate.Location = new System.Drawing.Point(190, 165);
-            PatchUpdate.Name = "PatchUpdate";
-            PatchUpdate.Size = new System.Drawing.Size(52, 16);
-            PatchUpdate.TabIndex = 9;
-            PatchUpdate.Text = "更新补丁";
-            PatchUpdate.UseVisualStyleBackColor = true;
+            AutoUpdate.AutoSize = true;
+            AutoUpdate.ForeColor = System.Drawing.Color.Blue;
+            AutoUpdate.Location = new System.Drawing.Point(190, 165);
+            AutoUpdate.Name = "AutoUpdate";
+            AutoUpdate.Size = new System.Drawing.Size(52, 16);
+            AutoUpdate.TabIndex = 9;
+            AutoUpdate.Text = "自动更新";
+            AutoUpdate.UseVisualStyleBackColor = true;
             // 
             // Save
             // 
@@ -206,7 +206,7 @@ namespace KartRider
             Controls.Add(Proxy_comboBox);
             Controls.Add(Proxy_label);
             Controls.Add(NgsOn);
-            Controls.Add(PatchUpdate);
+            Controls.Add(AutoUpdate);
             Controls.Add(Save);
             Font = new System.Drawing.Font("宋体", 9F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, 134);
             FormBorderStyle = System.Windows.Forms.FormBorderStyle.FixedToolWindow;
@@ -230,7 +230,7 @@ namespace KartRider
         private ComboBox AiSpeed_comboBox;
         private ComboBox Proxy_comboBox;
         private CheckBox NgsOn;
-        private CheckBox PatchUpdate;
+        private CheckBox AutoUpdate;
         private Button Save;
         private Label Name_label;
         private Label IP_label;
@@ -241,4 +241,3 @@ namespace KartRider
         private Label Proxy_label;
     }
 }
-

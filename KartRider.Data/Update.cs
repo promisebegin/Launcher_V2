@@ -75,12 +75,6 @@ namespace KartRider
                     Console.WriteLine("==============================");
                     if (launcherExeAsset.digest != sha256Hash)
                     {
-                        Console.WriteLine($"发现新版本, 请问是否需要更新? (y/N)");
-                        string input = Console.ReadLine();
-                        if (input.ToLower() != "y")
-                        {
-                            return false;
-                        }
                         try
                         {
                             string country = await GetCountryAsync();
@@ -94,7 +88,7 @@ namespace KartRider
                                 }
                                 if (await GetUrl(url2))
                                 {
-                                    int threadCount = 16; // 可根据需要调整线程数
+                                    int threadCount = 1; // 可根据需要调整线程数
                                     var downloader = new MultiThreadedDownloader(url2, Update_File, threadCount);
                                     var downloadResult1 = await downloader.StartDownloadAsync();
                                     if (downloadResult1)
@@ -106,7 +100,7 @@ namespace KartRider
                             }
                             else
                             {
-                                int threadCount = 16; // 可根据需要调整线程数
+                                int threadCount = 1; // 可根据需要调整线程数
                                 var downloader = new MultiThreadedDownloader(launcherExeAsset.browser_download_url, Update_File, threadCount);
                                 var downloadResult2 = await downloader.StartDownloadAsync();
                                 if (downloadResult2)
@@ -257,6 +251,31 @@ namespace KartRider
                 }
             }
         }
+
+        public static async Task<apiUpdate> GetUpdateAsync()
+        {
+            // API 地址
+            string url = "https://tcgapi.tiancity.com/tcgame/V2/apiUpdate?gameid=4";
+
+            // 创建 HTTP 客户端
+            using HttpClient client = new HttpClient();
+
+            try
+            {
+                // 发送 GET 请求并获取响应字符串
+                string json = await client.GetStringAsync(url);
+
+                // 解析 JSON
+                apiUpdate data = JsonSerializer.Deserialize<apiUpdate>(json);
+
+                return data;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"请求或解析失败: {ex.Message}");
+                return null;
+            }
+        }
     }
 
     // 1. 定义与GitHub Releases API对应的JSON模型（仅包含需要的字段，其他字段可忽略）
@@ -303,5 +322,16 @@ namespace KartRider
         /// 文件的浏览器下载链接
         /// </summary>
         public string browser_download_url { get; set; }
+    }
+
+    public class apiUpdate
+    {
+        public string game_id { get; set; }
+        public string game_name { get; set; }
+        public string version { get; set; }
+        public string install_pack_time { get; set; }
+        public string update_time { get; set; }
+        public string download_prefix { get; set; }
+        public string update_prefix { get; set; }
     }
 }

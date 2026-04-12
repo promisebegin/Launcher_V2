@@ -28,6 +28,9 @@ namespace RHOParser
         {
             try
             {
+                regionCode = GetRegionCode(input);
+
+                /*
                 // Check for sound_bgm_korea.rho and sound_bgm_lotte.rho files
                 string inputDir = Path.GetDirectoryName(input);
                 string korea = Path.Combine(inputDir, "sound_bgm_korea.rho");
@@ -38,7 +41,6 @@ namespace RHOParser
                 Console.WriteLine($"sound_bgm_korea.rho exists: {koreaFileExists}");
                 Console.WriteLine($"sound_bgm_lotte.rho exists: {lotteFileExists}");
 
-                regionCode = GetRegionCode(input);
                 BinaryXmlTag rootTag = GetAAATag(input);
 
                 // Find the sound/bgm folder path
@@ -205,6 +207,7 @@ namespace RHOParser
                         }
                     }
                 }
+                */
 
                 // Now open the modified aaa.pk with PackFolderManager
                 PackFolderManager packFolderManager = new PackFolderManager();

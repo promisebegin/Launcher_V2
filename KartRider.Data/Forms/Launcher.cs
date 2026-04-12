@@ -10,6 +10,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Threading;
+using System.Threading.Tasks;
 using System.Windows.Forms;
 
 namespace KartRider
@@ -23,47 +24,83 @@ namespace KartRider
 
         public Launcher()
         {
+            RestorePinFile();
+            this.InitializeComponent();
+        }
+
+        /// <summary>
+        /// 恢复备份的 PIN 文件
+        /// </summary>
+        private void RestorePinFile()
+        {
+            if (string.IsNullOrEmpty(pinFileBak) || string.IsNullOrEmpty(pinFile))
+                return;
+
             if (File.Exists(pinFileBak))
             {
-                File.Delete(pinFile);
-                File.Move(pinFileBak, pinFile);
+                try
+                {
+                    if (File.Exists(pinFile))
+                        File.Delete(pinFile);
+                    File.Move(pinFileBak, pinFile);
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"恢复 PIN 文件失败: {ex.Message}");
+                }
             }
-            this.InitializeComponent();
         }
 
         private void OnFormClosing(object sender, FormClosingEventArgs e)
         {
-            if (File.Exists(pinFileBak))
-            {
-                File.Delete(pinFile);
-                File.Move(pinFileBak, pinFile);
-            }
+            RestorePinFile();
         }
 
         private void OnLoad(object sender, EventArgs e)
         {
-            PINFile val = new PINFile(pinFile);
-            ProfileService.SettingConfig.ClientVersion = val.Header.MinorVersion;
-            ProfileService.SettingConfig.LocaleID = val.Header.LocaleID;
-            ProfileService.SettingConfig.nClientLoc = val.Header.Unk2;
-            ProfileService.SettingConfig.ServerList = val.AuthMethods[0].LoginServers;
-            ProfileService.SaveSettings();
-            ClientVersion.Text = val.Header.MinorVersion.ToString();
-            Console.WriteLine($"ClientVersion: {val.Header.MinorVersion}");
-            Console.WriteLine($"程序编译时间: {CompileTime.Time}");
-            VersionLabel.Text = CompileTime.Time;
-            Console.WriteLine("Process: {0}", KartRider);
-            Load_Data();
+            if (string.IsNullOrEmpty(pinFile) || !File.Exists(pinFile))
+            {
+                MessageBox.Show("PIN 文件路径无效或文件不存在！", "错误", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return;
+            }
+
             try
             {
-                RouterListener.Start();
-            }
-            catch (Exception ex)
-            {
-                if (ex is System.Net.Sockets.SocketException)
+                PINFile val = new PINFile(pinFile);
+                ProfileService.SettingConfig.ClientVersion = val.Header.MinorVersion;
+                ProfileService.SettingConfig.LocaleID = val.Header.LocaleID;
+                ProfileService.SettingConfig.nClientLoc = val.Header.Unk2;
+
+                // 安全检查：确保 AuthMethods 有元素
+                if (val.AuthMethods != null && val.AuthMethods.Count > 0 && val.AuthMethods[0].LoginServers != null)
+                {
+                    ProfileService.SettingConfig.ServerList = val.AuthMethods[0].LoginServers;
+                }
+
+                ProfileService.SaveSettings();
+                ClientVersion.Text = val.Header.MinorVersion.ToString();
+                Console.WriteLine($"ClientVersion: {val.Header.MinorVersion}");
+                Console.WriteLine($"程序编译时间: {CompileTime.Time}");
+                VersionLabel.Text = CompileTime.Time;
+                Console.WriteLine("Process: {0}", KartRider);
+                Load_Data();
+
+                try
+                {
+                    RouterListener.Start();
+                }
+                catch (System.Net.Sockets.SocketException)
                 {
                     LauncherSystem.MessageBoxType2();
                 }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"启动路由器监听失败: {ex.Message}");
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"加载 PIN 文件失败: {ex.Message}", "错误", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
 
@@ -75,50 +112,107 @@ namespace KartRider
             }
             else
             {
-                (new Thread(() =>
+                var thread = new Thread(() =>
                 {
-                    if (File.Exists(pinFileBak))
+                    try
                     {
-                        File.Delete(pinFile);
-                        File.Move(pinFileBak, pinFile);
+                        LaunchGame();
                     }
-                    Console.WriteLine("Backing up old PinFile...");
-                    Console.WriteLine(pinFile);
-                    File.Copy(pinFile, pinFileBak);
-                    PINFile val = new PINFile(pinFile);
-                    foreach (PINFile.AuthMethod authMethod in val.AuthMethods)
+                    catch (Exception ex)
                     {
-                        Console.WriteLine("Changing IP Addr to local... {0}", authMethod.Name);
-                        authMethod.LoginServers.Clear();
-                        authMethod.LoginServers.Add(new PINFile.IPEndPoint
-                        {
-                            IP = ProfileService.SettingConfig.ServerIP,
-                            Port = ProfileService.SettingConfig.ServerPort
-                        });
+                        Console.WriteLine($"启动游戏失败: {ex.Message}");
                     }
-                    if (!ProfileService.SettingConfig.NgsOn)
+                })
+                {
+                    IsBackground = true,
+                    Name = "GameLauncherThread"
+                };
+                thread.Start();
+            }
+        }
+
+        /// <summary>
+        /// 启动游戏的核心逻辑
+        /// </summary>
+        private void LaunchGame()
+        {
+            if (string.IsNullOrEmpty(pinFile) || !File.Exists(pinFile))
+            {
+                Console.WriteLine("PIN 文件不存在，无法启动游戏");
+                return;
+            }
+
+            RestorePinFile();
+
+            Console.WriteLine("Backing up old PinFile...");
+            Console.WriteLine(pinFile);
+
+            try
+            {
+                File.Copy(pinFile, pinFileBak, overwrite: true);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"备份 PIN 文件失败: {ex.Message}");
+                return;
+            }
+
+            PINFile val;
+            try
+            {
+                val = new PINFile(pinFile);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"读取 PIN 文件失败: {ex.Message}");
+                return;
+            }
+
+            if (val.AuthMethods != null)
+            {
+                foreach (PINFile.AuthMethod authMethod in val.AuthMethods)
+                {
+                    Console.WriteLine("Changing IP Addr to local... {0}", authMethod.Name);
+                    authMethod.LoginServers?.Clear();
+                    authMethod.LoginServers?.Add(new PINFile.IPEndPoint
                     {
-                        foreach (BmlObject bml in val.BmlObjects)
+                        IP = ProfileService.SettingConfig.ServerIP,
+                        Port = ProfileService.SettingConfig.ServerPort
+                    });
+                }
+            }
+
+            if (!ProfileService.SettingConfig.NgsOn && val.BmlObjects != null)
+            {
+                foreach (BmlObject bml in val.BmlObjects)
+                {
+                    if (bml.Name == "extra" && bml.SubObjects != null)
+                    {
+                        for (int i = bml.SubObjects.Count - 1; i >= 0; i--)
                         {
-                            if (bml.Name == "extra")
+                            Console.WriteLine("Removing {0}", bml.SubObjects[i].Item1);
+                            if (bml.SubObjects[i].Item1 == "NgsOn")
                             {
-                                for (int i = bml.SubObjects.Count - 1; i >= 0; i--)
-                                {
-                                    Console.WriteLine("Removing {0}", bml.SubObjects[i].Item1);
-                                    if (bml.SubObjects[i].Item1 == "NgsOn")
-                                    {
-                                        bml.SubObjects.RemoveAt(i);
-                                        break;
-                                    }
-                                }
+                                bml.SubObjects.RemoveAt(i);
+                                break;
                             }
                         }
                     }
-                    File.WriteAllBytes(pinFile, val.GetEncryptedData());
-                    var modifier = new MemoryModifier();
-                    modifier.LaunchAndModifyMemory(kartRiderDirectory);
-                })).Start();
+                }
             }
+
+            try
+            {
+                File.WriteAllBytes(pinFile, val.GetEncryptedData());
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"写入 PIN 文件失败: {ex.Message}");
+                return;
+            }
+
+            var modifier = new MemoryModifier();
+            modifier.LaunchAndModifyMemory(kartRiderDirectory);
         }
 
         private void Setting_Button_Click(object sender, EventArgs e)
@@ -129,19 +223,30 @@ namespace KartRider
 
         public void Load_Data()
         {
-            string ModelMax = Resources.ModelMax;
-            if (!File.Exists(FileName.ModelMax_LoadFile))
+            try
             {
-                using (StreamWriter streamWriter = new StreamWriter(FileName.ModelMax_LoadFile, false))
+                string ModelMax = Resources.ModelMax;
+                if (!File.Exists(FileName.ModelMax_LoadFile))
                 {
-                    streamWriter.Write(ModelMax);
-                }
-            }
-            XmlFileUpdater.XmlUpdater updater = new XmlFileUpdater.XmlUpdater();
-            updater.UpdateLocalXmlWithResource(FileName.ModelMax_LoadFile, ModelMax);
+                    string directory = Path.GetDirectoryName(FileName.ModelMax_LoadFile);
+                    if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
+                    {
+                        Directory.CreateDirectory(directory);
+                    }
 
-            SpecialKartConfig.SaveConfigToFile(FileName.SpecialKartConfig);
-            SlotData.kartConfig = SpecialKartConfig.LoadConfigFromFile(FileName.SpecialKartConfig);
+                    File.WriteAllText(FileName.ModelMax_LoadFile, ModelMax);
+                }
+
+                var updater = new XmlFileUpdater.XmlUpdater();
+                updater.UpdateLocalXmlWithResource(FileName.ModelMax_LoadFile, ModelMax);
+
+                SpecialKartConfig.SaveConfigToFile(FileName.SpecialKartConfig);
+                SlotData.kartConfig = SpecialKartConfig.LoadConfigFromFile(FileName.SpecialKartConfig);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"加载数据失败: {ex.Message}");
+            }
         }
 
         private void GitHub_Click(object sender, EventArgs e)
@@ -170,10 +275,29 @@ namespace KartRider
             }
         }
 
-        private void label_Client_Click(object sender, EventArgs e)
+        /// <summary>
+        /// 标签点击事件处理器（同步包装）
+        /// </summary>
+        private async void label_Client_Click(object sender, EventArgs e)
         {
-            GameVersion version = LauncherSystem.GetGameVersion();
-            if (version == null)
+            try
+            {
+                await label_Client_ClickAsync(sender, e);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"检查更新时出错: {ex.Message}");
+                MessageBox.Show($"检查更新失败: {ex.Message}", "错误", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
+        /// <summary>
+        /// 异步执行检查更新逻辑
+        /// </summary>
+        private async Task label_Client_ClickAsync(object sender, EventArgs e)
+        {
+            var data = await global::KartRider.Update.GetUpdateAsync();
+            if (data == null)
             {
                 MessageBox.Show("获取游戏版本失败！", "错误", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 return;
@@ -181,7 +305,7 @@ namespace KartRider
 
             // 弹出“是否”确认框
             DialogResult result = MessageBox.Show(
-                $"当前版本为：P{ClientVersion.Text}\n最新版本为：P{version.Version}\n是否需要更新？",
+                $"当前版本为：P{ClientVersion.Text}\n最新版本为：{data.version}\n是否需要更新？",
                 "确认操作",
                 MessageBoxButtons.YesNo,
                 MessageBoxIcon.Question
@@ -190,13 +314,8 @@ namespace KartRider
             // 根据用户选择执行对应逻辑
             if (result == DialogResult.Yes)
             {
-                if (File.Exists(pinFileBak))
-                {
-                    File.Delete(pinFile);
-                    File.Move(pinFileBak, pinFile);
-                }
-
-                LauncherSystem.CheckGame(kartRiderDirectory);
+                RestorePinFile();
+                LauncherSystem.CheckGameAsync(kartRiderDirectory);
             }
         }
 

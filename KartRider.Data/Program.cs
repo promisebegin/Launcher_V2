@@ -69,9 +69,12 @@ namespace KartRider
             }
             else
             {
+                ProfileService.LoadSettings();
                 // 检查更新
-                await Update.UpdateDataAsync();
-
+                if (ProfileService.SettingConfig.AutoUpdate)
+                {
+                    await Update.UpdateDataAsync();
+                }
                 string TCGame = "HKEY_CURRENT_USER\\Software\\TCGame\\kart";
                 string RootDirectory = (string)Registry.GetValue(TCGame, "gamepath", null);
                 if (File.Exists(FileName.pinFile) && File.Exists(FileName.KartRider))
@@ -97,10 +100,6 @@ namespace KartRider
                         File.Delete(pinFile);
                         File.Move(pinFileBak, pinFile);
                     }
-                    if (ProfileService.SettingConfig.PatchUpdate)
-                    {
-                        await PatchUpdate.UpdateDataAsync(RootDirectory);
-                    }
 
                     var packFolderManager = KartRhoFile.Dump(Path.GetFullPath(Path.Combine(RootDirectory, @"Data\aaa.pk")));
                     if (packFolderManager == null)
@@ -116,13 +115,12 @@ namespace KartRider
                         // 根据用户选择执行对应逻辑
                         if (result == DialogResult.Yes)
                         {
-                            LauncherSystem.CheckGame(RootDirectory);
+                            LauncherSystem.CheckGameAsync(RootDirectory);
                         }
                         return;
                     }
                     packFolderManager.Reset();
 
-                    ProfileService.LoadSettings();
                     if (!ProfileService.SettingConfig.Console)
                     {
                         ShowWindow(consoleHandle, SW_HIDE);
